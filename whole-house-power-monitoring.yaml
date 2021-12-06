@@ -34,8 +34,8 @@ esphome:
   board: nodemcu-32s
 
 wifi:
-  ssid: "MOVISTAR_E494"
-  password: "2ACCFEA91C72525800E3"
+  ssid: !secret home_ssid
+  password: !secret home_ssid_password
   power_save_mode: none
   fast_connect: on
   use_address: 192.168.1.170
@@ -46,8 +46,8 @@ wifi:
     dns1: 192.168.1.100
     dns2: 192.168.1.10
   ap:
-    ssid: "6CH_POWER_MONITORING_1"
-    password: "YhVY9uI5F7CK"
+    ssid: "HOME_POWER_MONITORING"
+    password: !secret esp_ap_password
 
 time:
   - platform: homeassistant
@@ -60,17 +60,17 @@ logger:
   level: VERBOSE
 
 api:
-  password: "Io5CYkg5OUgb"
+  password: !secret esphome_api_password
 
 ota:
   safe_mode: True
-  password: "F.3)+k-denJz"
+  password: !secret esphome_ota_password
 
 web_server:
   port: 8888
-#  auth:
-#    username: admin
-#    password: !secret esphome_web_server_password
+  auth:
+    username: !secret esphome_web_server_username
+    password: !secret esphome_web_server_password
 
 mqtt:
   broker: 192.168.1.100
