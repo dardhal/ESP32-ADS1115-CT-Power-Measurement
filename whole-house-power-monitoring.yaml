@@ -1,0 +1,476 @@
+# Hostname : esp32-02
+# Friendly Name : power-monitoring
+# Summary : Multi channel AC power monitoring for home electrical circuits
+# Description : By using SCT-013 CT clamps with 1 V AC output and external ADS1115 ADC, 
+#               measure per-circuit AC current for instantaneous and cumulative energy utilization
+# Software Used : Latest ESPHome code with two 4-channel ADS1115 ADC 16-bit boards attached to separate I2C buses
+#   https://esphome.io/devices/esp32.html
+#   https://esphome.io/components/i2c.html
+#   https://esphome.io/components/sensor/adc.html
+#   https://esphome.io/components/sensor/ct_clamp.html
+#
+# Last Modified : 2021-12-06
+#
+# TODO 01 : move private data such as SSID, credentials, IPs, etc. into secrets.yaml
+# TODO 02 : change text description so that the latest and greatest plans for circuits monitored is included
+# TODO 03 : create the two I2C buses to which to attach the ADS1115 boards
+# TODO 04 : configure web_server authentication
+# TODO 05 : decide on the naming for each of the monitored circuits and the topics to be sent to through MQTT
+# TODO 06 : get a reliable source for AC voltage to calculate power from
+
+
+
+#### ESP32 Hardware I2C bus
+# There are two hardware I2C peripherals with identifiers 0 and 1. Any available output-capable pins can be used for SCL and SDA but the defaults are given below.
+#     |  I2C(0)  |  I2C(1)
+# ----+----------+--------
+# scl |    18    |    25
+# sda |    19    |    26
+
+esphome:
+  name: power-monitoring
+  comment: "House Power Monitoring"
+  platform: ESP32
+  board: nodemcu-32s
+
+wifi:
+  ssid: "MOVISTAR_E494"
+  password: "2ACCFEA91C72525800E3"
+  power_save_mode: none
+  fast_connect: on
+  use_address: 192.168.1.170
+  manual_ip:
+    static_ip: 192.168.1.170
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+    dns1: 192.168.1.100
+    dns2: 192.168.1.10
+  ap:
+    ssid: "6CH_POWER_MONITORING_1"
+    password: "YhVY9uI5F7CK"
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    timezone: "Europe/Madrid"
+
+captive_portal:
+
+logger:
+  level: VERBOSE
+
+api:
+  password: "Io5CYkg5OUgb"
+
+ota:
+  safe_mode: True
+  password: "F.3)+k-denJz"
+
+web_server:
+  port: 8888
+#  auth:
+#    username: admin
+#    password: !secret esphome_web_server_password
+
+mqtt:
+  broker: 192.168.1.100
+  port: 1883
+  discovery: True
+  discovery_retain: True
+  discovery_prefix: "homeassistant"
+  topic_prefix: home/indoors/mechanical_room/6ch_power_monitoring_1
+
+binary_sensor:
+  - platform: status
+    name: "House Power Monitoring Status"
+
+switch:
+  - platform: restart
+    name: "House Power Monitoring"
+
+sensor:
+  #### WiFi signal level sensor
+  - platform: wifi_signal
+    name: "House Power Monitoring WiFi Level"
+    update_interval: 60s
+
+
+#### On the ESP32 pins GPIO32 through GPIO39 can be used as ADCs
+#### https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/adc.html
+####--------------------------------------------------------------
+####TO MAXIMIZE AMOUNT OF CIRCUITS TO BE MEASURED WITH MINIMUM CHANGES
+####--------------------------------------------------------------
+####1. Frigorífico    :  5A clamp : 1150 W : Pending Purchase
+####
+####2. Iluminación    : 15A clamp : 3000 W : Pending PIA Rellocation (Lavadora 1 to the right)
+####   Lavadora       :
+####
+####3. Telecom.       :
+####   Sensores       :  5A clamp : 1150 W : Pending Purchase
+####   Ventilación    :
+####
+####4. Fuerza Seco    : 10A clamp : 2300 W : Pending Installation
+####
+####5. Fuerza Húmedo  : 30A clamp : 6900 W : Pending Installation
+####   Horno          :
+####
+####6. Inducción      : 30A clamp : 6900 W : Pending Installation
+####   Lavavajillas   :
+####--------------------------------------------------------------
+
+#### NOTE : ESP32 ADC inputs are highly non-linear at the end of the range, ie. under 150 mV it reads zero
+####        For CT clamps with 1 V output, it means currents of 15% the full range can't be measured : 
+####        - 0.75 A AC or  170 W for  5 A clamp
+####        - 1.50 A AC or  345 W for 10 A clamp
+####        - 3.00 A AC or  690 W for 20 A clamp
+####        - 4.50 A AC or 1035 W for 30 A clamp
+####        https://github.com/espressif/esp-idf/issues/164
+####        https://www.esp32.com/viewtopic.php?t=2881
+#### Official docs are now clear regarding the attenuation parameter and the impossibility to measure voltages under 100 mV approximately :
+####   https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/adc.html#adc-attenuation
+####
+#### In summary, ESP32 is inappropriate to measure voltage at the low end of the range (< 100 mV) and hence inadequate for this use case.
+#### Alternative would be to use one or more external quality ADC circuits (ie. ADS1115 , 4 x 16 bit ADC through I2C, can use 4 boards at same time) instead
+####    https://esphome.io/components/sensor/ads1115.html
+#### Although a ESP8266 only has one (software) I2C whereas a ESP32 has two hardware I2C only (limiting amount of measured channels to eight)
+####
+#### When measured with the volt meter, we obtained the following values at the terminals of the CT clamps for known currents :
+####                5 A CT Clamp    10A CT Clamp    15A CT Clamp    30A CT Clamp
+#### 0.135 A AC :       0.0256 V        0.0130 V        0.0085 V        0.0042 V
+#### 4.050 A AC :       0.8090 V        0.4060 V        0.2700 V        0.1350 V
+#### 7.700 A AC :       1.5450 V        0.7750 V        0.5150 V        0.2580 V
+
+#### 1. FRIDGE (GPIO32)
+  - platform: adc
+    pin: GPIO32
+    name: "Fridge ADC Pin Voltage"
+    accuracy_decimals: 3
+    update_interval: 5s
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: fridge_adc_sensor
+    filters:
+      - throttle: 15s
+
+  #### CT Clamp integration from measured ADC values
+  - platform: ct_clamp
+    sensor: fridge_adc_sensor
+    name: "Fridge AC Current"
+    accuracy_decimals: 3
+    sample_duration: 200ms
+    update_interval: 10s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: fridge_ac_current
+    filters:
+      - calibrate_linear:
+          # Measured ct_clamp A sensor measurement to real A current
+          - 0.0750 -> 0.135
+          - 0.2950 -> 4.070
+          - 0.2950 -> 4.070
+      - throttle: 30s
+
+  #### Template to also publish calculated power measured (using 230 V)
+  - platform: template
+    name: "Fridge AC Power"
+    lambda: |-
+      if ( id(fridge_ac_current).state < 0 ) {
+        return 0;
+      } else {
+        return (230 * id(fridge_ac_current).state);
+      }
+    accuracy_decimals: 3
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: fridge_ac_power
+
+  - platform: total_daily_energy
+    name: "Fridge Energy Consumed"
+    power_id: fridge_ac_power
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+
+
+#### 2. LIGHTING + WASHING MACHINE (GPIO33)
+  - platform: adc
+    pin: GPIO33
+    name: "Lights ADC Pin Voltage"
+    accuracy_decimals: 3
+    update_interval: 1s
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: lights_adc_sensor
+    filters:
+      - throttle: 60s
+
+  #### CT Clamp integration from measured ADC values
+  - platform: ct_clamp
+    sensor: lights_adc_sensor
+    name: "Lights AC Current"
+    accuracy_decimals: 3
+    sample_duration: 200ms
+    update_interval: 5s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: lights_ac_current
+    filters:
+      - calibrate_linear:
+          # Measured value for 0 A on wire (0.0011 from lights_adc_sensor)
+          - 0.0011 -> 0.00
+          # Measured value for 2.07 A on wire (0.072 from lights_adc_sensor)
+          - 0.072 -> 2.07
+      - throttle: 30s
+
+  #### Template to also publish calculated power measured (using 230 V)
+  - platform: template
+    name: "Lights AC Power"
+    lambda: |-
+      if ( id(lights_ac_current).state < 0 ) {
+        return 0;
+      } else {
+        return (230 * id(lights_ac_current).state);
+      }
+    accuracy_decimals: 3
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: lights_ac_power
+
+  - platform: total_daily_energy
+    name: "Lights Energy Consumed"
+    power_id: lights_ac_power
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+
+
+#### 3. TELECOM + SENSORS + MVHR (GPIO34)
+  - platform: adc
+    pin: GPIO34
+    name: "Telecom ADC Pin Voltage"
+    accuracy_decimals: 3
+    update_interval: 1s
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: telecom_adc_sensor
+    filters:
+      - throttle: 60s
+
+  #### CT Clamp integration from measured ADC values
+  - platform: ct_clamp
+    sensor: telecom_adc_sensor
+    name: "Telecom AC Current"
+    accuracy_decimals: 3
+    sample_duration: 200ms
+    update_interval: 5s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: telecom_ac_current
+    filters:
+      - calibrate_linear:
+          # Measured value for 0 A on wire (0.0011 from telecom_adc_sensor)
+          - 0.0011 -> 0.00
+          # Measured value for 2.07 A on wire (0.072 from telecom_adc_sensor)
+          - 0.072 -> 2.07
+      - throttle: 30s
+
+  #### Template to also publish calculated power measured (using 230 V)
+  - platform: template
+    name: "Telecom AC Power"
+    lambda: |-
+      if ( id(telecom_ac_current).state < 0 ) {
+        return 0;
+      } else {
+        return (230 * id(telecom_ac_current).state);
+      }
+    accuracy_decimals: 3
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: telecom_ac_power
+
+  - platform: total_daily_energy
+    name: "Telecom Energy Consumed"
+    power_id: telecom_ac_power
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+
+
+#### 4. POWER DRY (GPIO35)
+  - platform: adc
+    pin: GPIO35
+    name: "PowerDry ADC Pin Voltage"
+    accuracy_decimals: 3
+    update_interval: 1s
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: powerdry_adc_sensor
+    filters:
+      - throttle: 60s
+
+  #### CT Clamp integration from measured ADC values
+  - platform: ct_clamp
+    sensor: powerdry_adc_sensor
+    name: "PowerDry AC Current"
+    accuracy_decimals: 3
+    sample_duration: 200ms
+    update_interval: 5s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: powerdry_ac_current
+    filters:
+      - calibrate_linear:
+          # Measured value for 0 A on wire (0.0011 from powerdry_adc_sensor)
+          - 0.0011 -> 0.00
+          # Measured value for 2.07 A on wire (0.072 from powerdry_adc_sensor)
+          - 0.072 -> 2.07
+      - throttle: 30s
+
+  #### Template to also publish calculated power measured (using 230 V)
+  - platform: template
+    name: "PowerDry AC Power"
+    lambda: |-
+      if ( id(powerdry_ac_current).state < 0 ) {
+        return 0;
+      } else {
+        return (230 * id(powerdry_ac_current).state);
+      }
+    accuracy_decimals: 3
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: powerdry_ac_power
+
+  - platform: total_daily_energy
+    name: "PowerDry Energy Consumed"
+    power_id: powerdry_ac_power
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+
+
+#### 5. POWER DAMP + OVEN (GPIO36)
+  - platform: adc
+    pin: GPIO36
+    name: "PowerDamp ADC Pin Voltage"
+    accuracy_decimals: 3
+    update_interval: 1s
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: powerdamp_adc_sensor
+    filters:
+      - throttle: 60s
+
+  #### CT Clamp integration from measured ADC values
+  - platform: ct_clamp
+    sensor: powerdamp_adc_sensor
+    name: "PowerDamp AC Current"
+    accuracy_decimals: 3
+    sample_duration: 200ms
+    update_interval: 5s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: powerdamp_ac_current
+    filters:
+      - calibrate_linear:
+          # Measured value for 0 A on wire (0.0011 from powerdamp_adc_sensor)
+          - 0.0011 -> 0.00
+          # Measured value for 2.07 A on wire (0.072 from powerdamp_adc_sensor)
+          - 0.072 -> 2.07
+      - throttle: 30s
+
+  #### Template to also publish calculated power measured (using 230 V)
+  - platform: template
+    name: "PowerDamp AC Power"
+    lambda: |-
+      if ( id(powerdamp_ac_current).state < 0 ) {
+        return 0;
+      } else {
+        return (230 * id(powerdamp_ac_current).state);
+      }
+    accuracy_decimals: 3
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: powerdamp_ac_power
+
+  - platform: total_daily_energy
+    name: "PowerDamp Energy Consumed"
+    power_id: powerdamp_ac_power
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+
+#### INDUCTION HOB + DISHWASHER (GPIO39)
+  - platform: adc
+    pin: GPIO39
+    name: "Induction ADC Pin Voltage"
+    accuracy_decimals: 3
+    update_interval: 1s
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: induction_adc_sensor
+    filters:
+      - throttle: 60s
+
+  #### CT Clamp integration from measured ADC values
+  - platform: ct_clamp
+    sensor: induction_adc_sensor
+    name: "Induction AC Current"
+    accuracy_decimals: 3
+    sample_duration: 200ms
+    update_interval: 5s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: induction_ac_current
+    filters:
+      - calibrate_linear:
+          # Measured value for 0 A on wire (0.0011 from induction_adc_sensor)
+          - 0.0011 -> 0.00
+          # Measured value for 2.07 A on wire (0.072 from induction_adc_sensor)
+          - 0.072 -> 2.07
+      - throttle: 30s
+
+  #### Template to also publish calculated power measured (using 230 V)
+  - platform: template
+    name: "Induction AC Power"
+    lambda: |-
+      if ( id(induction_ac_current).state < 0 ) {
+        return 0;
+      } else {
+        return (230 * id(induction_ac_current).state);
+      }
+    accuracy_decimals: 3
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: induction_ac_power
+
+  - platform: total_daily_energy
+    name: "Induction Energy Consumed"
+    power_id: induction_ac_power
+    filters:
+      - multiply: 0.001
+    unit_of_measurement: kWh
+
