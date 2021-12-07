@@ -11,25 +11,17 @@
 #
 # Last Modified : 2021-12-06
 #
-# TODO 01 : move private data such as SSID, credentials, IPs, etc. into secrets.yaml
 # TODO 02 : change text description so that the latest and greatest plans for circuits monitored is included
-# TODO 03 : create the two I2C buses to which to attach the ADS1115 boards
-# TODO 04 : configure web_server authentication
+# TODO 03 : create the two I2C buses to which to attach the ADS1115 boards, or use only one with two ADS1115 at different addresses
 # TODO 05 : decide on the naming for each of the monitored circuits and the topics to be sent to through MQTT
 # TODO 06 : get a reliable source for AC voltage to calculate power from
+# TODO 07 : Technical Room power socket is connected to "Fuerza Húmedos", and not "Telecom" or any other
+# TODO 08 : pending to identify which circuit the extractor hood is connected to
 
-
-
-#### ESP32 Hardware I2C bus
-# There are two hardware I2C peripherals with identifiers 0 and 1. Any available output-capable pins can be used for SCL and SDA but the defaults are given below.
-#     |  I2C(0)  |  I2C(1)
-# ----+----------+--------
-# scl |    18    |    25
-# sda |    19    |    26
 
 esphome:
   name: power-monitoring
-  comment: "House Power Monitoring"
+  comment: "Home Power Monitoring"
   platform: ESP32
   board: nodemcu-32s
 
@@ -78,67 +70,23 @@ mqtt:
   discovery: True
   discovery_retain: True
   discovery_prefix: "homeassistant"
-  topic_prefix: home/indoors/mechanical_room/6ch_power_monitoring_1
+  topic_prefix: home/indoors/mechanical_room/home_power_monitoring
 
 binary_sensor:
   - platform: status
-    name: "House Power Monitoring Status"
+    name: "Home Power Monitoring Status"
 
 switch:
   - platform: restart
-    name: "House Power Monitoring"
+    name: "Home Power Monitoring Restart"
 
 sensor:
   #### WiFi signal level sensor
   - platform: wifi_signal
-    name: "House Power Monitoring WiFi Level"
+    name: "Home Power Monitoring WiFi Level"
     update_interval: 60s
 
 
-#### On the ESP32 pins GPIO32 through GPIO39 can be used as ADCs
-#### https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/adc.html
-####--------------------------------------------------------------
-####TO MAXIMIZE AMOUNT OF CIRCUITS TO BE MEASURED WITH MINIMUM CHANGES
-####--------------------------------------------------------------
-####1. Frigorífico    :  5A clamp : 1150 W : Pending Purchase
-####
-####2. Iluminación    : 15A clamp : 3000 W : Pending PIA Rellocation (Lavadora 1 to the right)
-####   Lavadora       :
-####
-####3. Telecom.       :
-####   Sensores       :  5A clamp : 1150 W : Pending Purchase
-####   Ventilación    :
-####
-####4. Fuerza Seco    : 10A clamp : 2300 W : Pending Installation
-####
-####5. Fuerza Húmedo  : 30A clamp : 6900 W : Pending Installation
-####   Horno          :
-####
-####6. Inducción      : 30A clamp : 6900 W : Pending Installation
-####   Lavavajillas   :
-####--------------------------------------------------------------
-
-#### NOTE : ESP32 ADC inputs are highly non-linear at the end of the range, ie. under 150 mV it reads zero
-####        For CT clamps with 1 V output, it means currents of 15% the full range can't be measured : 
-####        - 0.75 A AC or  170 W for  5 A clamp
-####        - 1.50 A AC or  345 W for 10 A clamp
-####        - 3.00 A AC or  690 W for 20 A clamp
-####        - 4.50 A AC or 1035 W for 30 A clamp
-####        https://github.com/espressif/esp-idf/issues/164
-####        https://www.esp32.com/viewtopic.php?t=2881
-#### Official docs are now clear regarding the attenuation parameter and the impossibility to measure voltages under 100 mV approximately :
-####   https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/adc.html#adc-attenuation
-####
-#### In summary, ESP32 is inappropriate to measure voltage at the low end of the range (< 100 mV) and hence inadequate for this use case.
-#### Alternative would be to use one or more external quality ADC circuits (ie. ADS1115 , 4 x 16 bit ADC through I2C, can use 4 boards at same time) instead
-####    https://esphome.io/components/sensor/ads1115.html
-#### Although a ESP8266 only has one (software) I2C whereas a ESP32 has two hardware I2C only (limiting amount of measured channels to eight)
-####
-#### When measured with the volt meter, we obtained the following values at the terminals of the CT clamps for known currents :
-####                5 A CT Clamp    10A CT Clamp    15A CT Clamp    30A CT Clamp
-#### 0.135 A AC :       0.0256 V        0.0130 V        0.0085 V        0.0042 V
-#### 4.050 A AC :       0.8090 V        0.4060 V        0.2700 V        0.1350 V
-#### 7.700 A AC :       1.5450 V        0.7750 V        0.5150 V        0.2580 V
 
 #### 1. FRIDGE (GPIO32)
   - platform: adc
