@@ -32,13 +32,8 @@
 # 
 # 8. Bajo Vivienda : 10 A / 1 V SCT-013 #2
 #
-# Last Modified : 2021-12-11
+# Last Modified : 2022-01-15
 #
-# TODO 05 : decide on the naming for each of the monitored circuits and the topics to be sent to through MQTT
-# TODO 06 : get a reliable source for AC voltage to calculate power from
-# TODO 08 : pending to identify which circuit the extractor hood is connected to
-# TODO 09 : Pending PIA Rellocation (Lavadora 1 to the right)
-# TODO 10 : can't figure out a way to separate lengthy and mostly repetitive configuration blocks to separate files (!include)
 
 esphome:
   name: power-monitoring
@@ -127,6 +122,16 @@ sensor:
     name: "Home Power Monitoring WiFi Level"
     update_interval: 60s
 
+  - platform: homeassistant
+    name: "Measured AC Voltage"
+    entity_id: sensor.ac_voltage
+    attribute: voltage
+    unit_of_measurement: "V"
+    device_class: temperature
+    accuracy_decimals: 1
+    id: ha_ac_voltage
+    filters:
+      - offset: 12.0
 
 #### Sensor definitions for each of the monitored circuits in separate files for readability
 
@@ -149,27 +154,31 @@ sensor:
     name: "Fridge AC Current"
     sensor: ac_v_fridge_adc_sensor
     accuracy_decimals: 2
-    sample_duration: 200ms
+    sample_duration: 1000ms
     update_interval: 10s
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
     id: ac_a_fridge_ct_sensor
     filters:
-      - calibrate_linear:
-          # Linear mapping for calculated Amps AC to real Amps AC on the wire
-          - 0.0750 -> 0.135
-          - 0.2950 -> 4.070
+      - calibrate_polynomial:
+          degree: 2
+          datapoints:
+            - 0.005 -> 0.000
+            - 0.027 -> 0.145
+            - 1.200 -> 4.220
       - throttle: 30s
   
-  #### Template to also publish calculated power measured (using 230 V)
   - platform: template
     name: "Fridge AC Power"
     lambda: |-
       if ( id(ac_a_fridge_ct_sensor).state < 0 ) {
         return 0;
+      }
+      if ( id(ac_a_fridge_ct_sensor).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_fridge_ct_sensor).state) );
       } else {
-        return (230 * id(ac_a_fridge_ct_sensor).state);
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_fridge_ct_sensor).state) );
       }
     accuracy_decimals: 1
     update_interval: 30s
@@ -185,26 +194,68 @@ sensor:
     filters:
       - multiply: 0.001
   
-  - platform: homeassistant
-    name: "Measured AC Voltage"
-    entity_id: sensor.ac_voltage
-    attribute: voltage
+
+# 2. LIGHTING + WASHING MACHINE (ADS1115 0x48, A1_GND)
+  - platform: ads1115
+    name: "Lighting Washing CT AC Voltage (0x48_A1_GND)"
+    multiplexer: 'A1_GND'
+    gain: 2.048
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 10s
+    accuracy_decimals: 4
+    state_class: measurement
+    device_class: voltage
     unit_of_measurement: "V"
-    device_class: temperature
-    accuracy_decimals: 1
-    id: ha_ac_voltage
+    id: ac_v_lighting_adc_sensor
     filters:
-      - offset: 12.0
+      - throttle: 30s
+  
+  - platform: ct_clamp
+    name: "Lighting Washing AC Current"
+    sensor: ac_v_lighting_adc_sensor
+    accuracy_decimals: 2
+    sample_duration: 1000ms
+    update_interval: 10s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: ac_a_lighting_ct_sensor
+    filters:
+      - calibrate_polynomial:
+          degree: 2
+          datapoints:
+            - 0.002 -> 0.000
+            - 0.009 -> 0.145
+            - 0.260 -> 4.160
+            - 0.965 -> 8.000
+      - throttle: 30s
+  
+  - platform: template
+    name: "Lighting Washing AC Power"
+    lambda: |-
+      if ( id(ac_a_lighting_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ac_a_lighting_ct_sensor).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_lighting_ct_sensor).state) );
+      } else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_lighting_ct_sensor).state) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_lighting
+  
+  - platform: total_daily_energy
+    name: "Lighting Washing Energy Consumed"
+    power_id: ac_power_lighting
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
 
-#    lambda: |-
-#      if ( id(ha_ac_voltage).state < 0 ) {
-#        return 0;
-#      } else {
-#        return (id(ha_ac_voltage) * id(ac_a_fridge_ct_sensor).state);
-#      }
 
-
-##### 2. LIGHTING + WASHING MACHINE (ADS1115 0x48, A1_GND)
 ####  - platform: !include 0x48_a1_lighting.conf
 ##### 3. TELECOM + SENSORS + MVHR (ADS1115 0x48, A2_GND)
 ####  - platform: !include 0x48_a2_telecom.conf
