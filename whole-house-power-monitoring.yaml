@@ -122,16 +122,16 @@ sensor:
     name: "Home Power Monitoring WiFi Level"
     update_interval: 60s
 
-  - platform: homeassistant
-    name: "Measured AC Voltage"
-    entity_id: sensor.ac_voltage
-    attribute: voltage
-    unit_of_measurement: "V"
-    device_class: temperature
-    accuracy_decimals: 1
-    id: ha_ac_voltage
-    filters:
-      - offset: 12.0
+####  - platform: homeassistant
+####    name: "Measured AC Voltage"
+####    entity_id: sensor.ac_voltage
+####    attribute: voltage
+####    unit_of_measurement: "V"
+####    device_class: voltage
+####    accuracy_decimals: 1
+####    id: ha_ac_voltage
+####    filters:
+####      - offset: 12.0
 
 #### Sensor definitions for each of the monitored circuits in separate files for readability
 
@@ -175,11 +175,7 @@ sensor:
       if ( id(ac_a_fridge_ct_sensor).state < 0 ) {
         return 0;
       }
-      if ( id(ac_a_fridge_ct_sensor).state < 180 ) {
-        return ( abs(230.0 * id(ac_a_fridge_ct_sensor).state) );
-      } else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_fridge_ct_sensor).state) );
-      }
+      return ( abs(230.0 * id(ac_a_fridge_ct_sensor).state) );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
@@ -236,11 +232,7 @@ sensor:
       if ( id(ac_a_lighting_ct_sensor).state < 0 ) {
         return 0;
       }
-      if ( id(ac_a_lighting_ct_sensor).state < 180 ) {
-        return ( abs(230.0 * id(ac_a_lighting_ct_sensor).state) );
-      } else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_lighting_ct_sensor).state) );
-      }
+      return ( abs(230.0 * id(ac_a_lighting_ct_sensor).state) );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
