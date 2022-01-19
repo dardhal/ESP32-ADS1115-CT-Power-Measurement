@@ -1,8 +1,7 @@
-* TODO 05 : decide on the naming for each of the monitored circuits and the topics to be sent to through MQTT
-
 * TODO 06 : get a reliable source for AC voltage to calculate power from
 
 * TODO 08 : pending to identify which circuit the extractor hood is connected to
 
 * TODO 10 : can't figure out a way to separate lengthy and mostly repetitive configuration blocks to separate files (!include)
+
 
