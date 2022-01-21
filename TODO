@@ -1,7 +1,18 @@
-* TODO 06 : get a reliable source for AC voltage to calculate power from
+* Get a reliable source for AC voltage to calculate power from
 
-* TODO 08 : pending to identify which circuit the extractor hood is connected to
+* Pending to identify which circuit the extractor hood is connected to
 
-* TODO 10 : can't figure out a way to separate lengthy and mostly repetitive configuration blocks to separate files (!include)
+* Can't figure out a way to separate lengthy and mostly repetitive configuration blocks to separate files (!include)
+
+* It doesn't make any fucking sense the calibration options as they don't yield the expected results (could all measurements so far be so much off as those from the 10 A clamp?)
+
+10 A CT CLAMP OUTPUT TOPS UP AT ~ 987 mV
+ct_clamp OUT //  SCT-013 output (mV), rest calculated
+-----------------------------------------------------
+0.0260 Aac   //   30 mV -> 0.300 Aac ->   72 W (reposo)
+0.0600 Aac   //   65 mV -> 0.650 Aac ->  156 W (+ monitor cocina)
+0.0975 Aac   //  100 mV -> 1.000 Aac ->  240 W (++ PC Susi con 1 x CPU al 100%)
+0.7100 Aac   //  485 mV -> 4.850 Aac -> 1165 W (++ calefactor en potencia 1)
+1.1350 Aac   //  857 mV -> 8.570 Aac -> 2057 W (++ calefactor en potencia 2)
 
 

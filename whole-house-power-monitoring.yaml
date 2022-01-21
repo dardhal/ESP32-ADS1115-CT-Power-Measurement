@@ -32,7 +32,7 @@
 # 
 # 8. Bajo Vivienda : 10 A / 1 V SCT-013 #2
 #
-# Last Modified : 2022-01-15
+# Last Modified : 2022-01-21
 #
 
 esphome:
@@ -80,13 +80,13 @@ web_server:
     username: !secret esphome_web_server_username
     password: !secret esphome_web_server_password
 
-mqtt:
-  broker: 192.168.1.100
-  port: 1883
-  discovery: True
-  discovery_retain: True
-  discovery_prefix: "homeassistant"
-  topic_prefix: home/indoors/mechanical_room/home_power_monitoring
+####mqtt:
+####  broker: 192.168.1.100
+####  port: 1883
+####  discovery: True
+####  discovery_retain: True
+####  discovery_prefix: "homeassistant"
+####  topic_prefix: home/indoors/mechanical_room/home_power_monitoring
 
 
 # Create single I2C bus where both ADS1115 at addresses 0x48 and 0x49 will be used and
@@ -100,11 +100,11 @@ i2c:
 
 ads1115:
   - address: 0x48
-    continuous_mode: off
+    continuous_mode: on
     id: ads1115_bus_0x48
 
   - address: 0x49
-    continuous_mode: off
+    continuous_mode: on
     id: ads1115_bus_0x49
 
 
@@ -135,6 +135,7 @@ sensor:
 #### Sensor definitions for each of the monitored circuits in separate files for readability
 
 # 1. FRIDGE (ADS1115 0x48 , A0_GND)
+# 5 A / 1 V SCT-013 #1
   - platform: ads1115
     name: "Fridge CT AC Voltage (0x48_A0_GND)"
     multiplexer: 'A0_GND'
@@ -196,6 +197,7 @@ sensor:
   
 
 # 2. LIGHTING + WASHING MACHINE (ADS1115 0x48, A1_GND)
+# 15 A / 1 V SCT-013 #1
   - platform: ads1115
     name: "Lighting Washing CT AC Voltage (0x48_A1_GND)"
     multiplexer: 'A1_GND'
@@ -257,7 +259,8 @@ sensor:
       - multiply: 0.001
 
 
-# 2. TELECOM/SENSORS + MVHR (ADS1115 0x48, A2_GND)
+# 3. TELECOM/SENSORS + MVHR (ADS1115 0x48, A2_GND)
+# 5 A / 1 V SCT-013 #2
   - platform: ads1115
     name: "Telecom MVHR CT AC Voltage (0x48_A2_GND)"
     multiplexer: 'A2_GND'
@@ -317,9 +320,71 @@ sensor:
     filters:
       - multiply: 0.001
 
-##### 4. POWER DRY (ADS1115 0x48, A3_GND)
-####  - platform: !include 0x48_a3_powerdry.conf
-####
+
+# 4. POWER DRY (ADS1115 0x48, A3_GND)
+# 10 A / 1 V SCT-013 #1
+  - platform: ads1115
+    name: "Power Dry CT AC Voltage (0x48_A3_GND)"
+    multiplexer: 'A3_GND'
+    gain: 2.048
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 10s
+    accuracy_decimals: 4
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: ac_v_powerdry_adc_sensor
+    filters:
+      - throttle: 30s
+  
+  - platform: ct_clamp
+    name: "Power Dry AC Current"
+    sensor: ac_v_powerdry_adc_sensor
+    accuracy_decimals: 2
+    sample_duration: 1000ms
+    update_interval: 10s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: ac_a_powerdry_ct_sensor
+    filters:
+      - calibrate_polynomial:
+          degree: 3
+          datapoints:
+            - 0.026 -> 0.30
+            - 0.060 -> 0.65
+            - 0.098 -> 1.00
+            - 0.710 -> 4.85
+            - 1.150 -> 7.91
+      - throttle: 30s
+  
+  - platform: template
+    name: "Power Dry AC Power"
+    lambda: |-
+      if ( id(ac_a_powerdry_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_powerdry_ct_sensor).state) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdry_ct_sensor).state) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_powerdry
+  
+  - platform: total_daily_energy
+    name: "Power Dry Energy Consumed"
+    power_id: ac_power_powerdry
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
 ##### 5. POWER DAMP + OVEN (ADS1115 0x49, A0_GND)
 ####  - platform: !include 0x49_a0_powerdamp.conf
 ##### 6. INDUCTION HOB + DISHWASHER (ADS1115 0x49, A1_GND)
