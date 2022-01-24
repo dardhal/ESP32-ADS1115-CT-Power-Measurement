@@ -15,4 +15,5 @@ ct_clamp OUT //  SCT-013 output (mV), rest calculated
 0.7100 Aac   //  485 mV -> 4.850 Aac -> 1165 W (++ calefactor en potencia 1)
 1.1350 Aac   //  857 mV -> 8.570 Aac -> 2057 W (++ calefactor en potencia 2)
 
+* After all, it could be none of the circuits measured are giving correct values through the whole scale , check it out and fix if possible
 

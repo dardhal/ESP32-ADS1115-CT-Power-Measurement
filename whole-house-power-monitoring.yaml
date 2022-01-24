@@ -15,15 +15,13 @@
 # 2. Iluminación    : 15 A / 1 V SCT-013 #1
 #    Lavadora       :
 # 
-# 3. Telecom.       :
-#    Sensores       :  5 A / 1 V SCT-013 #2
+# 3. Telecom.+Sensor: 5 A / 1 V SCT-013 #2
 #    Ventilación    : <<-- pending
 # 
 # 4. Fuerza Seco    : 10 A / 1 V SCT-013 #1
 # 
-# 5. Fuerza Húmedo  : 
-#    Horno          : 30 A / 1 V SCT-013 #1
-#    Domótica       :
+# 5. Fuerza Húmedos : 30 A / 1 V SCT-013 #1 (incl. Domótica)
+#    Horno          :
 # 
 # 6. Inducción      : 30 A / 1 V SCT-013 #2
 #    Lavavajillas   : 
@@ -32,7 +30,7 @@
 # 
 # 8. Bajo Vivienda : 10 A / 1 V SCT-013 #2
 #
-# Last Modified : 2022-01-21
+# Last Modified : 2022-01-22
 #
 
 esphome:
@@ -385,8 +383,69 @@ sensor:
       - multiply: 0.001
 
 
-##### 5. POWER DAMP + OVEN (ADS1115 0x49, A0_GND)
-####  - platform: !include 0x49_a0_powerdamp.conf
+# 5. POWER DAMP + OVEN (ADS1115 0x49, A0_GND)
+# 30 A / 1 V SCT-013 #1
+  - platform: ads1115
+    name: "Damp Oven CT AC Voltage (0x49_A0_GND)"
+    multiplexer: 'A0_GND'
+    gain: 2.048
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 10s
+    accuracy_decimals: 4
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: ac_v_dampoven_adc_sensor
+    filters:
+      - throttle: 30s
+  
+  - platform: ct_clamp
+    name: "Damp Oven AC Current"
+    sensor: ac_v_dampoven_adc_sensor
+    accuracy_decimals: 2
+    sample_duration: 1000ms
+    update_interval: 10s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: ac_a_dampoven_ct_sensor
+    filters:
+      - calibrate_polynomial:
+          degree: 2
+          datapoints:
+            - 0.001 -> 0.00
+            - 0.004 -> 0.15
+            - 0.139 -> 4.16
+            - 0.252 -> 8.00
+      - throttle: 30s
+  
+  - platform: template
+    name: "Damp Oven AC Power"
+    lambda: |-
+      if ( id(ac_a_dampoven_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_dampoven_ct_sensor).state) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_dampoven_ct_sensor).state) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_dampoven
+  
+  - platform: total_daily_energy
+    name: "Damp Oven Energy Consumed"
+    power_id: ac_power_dampoven
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
 ##### 6. INDUCTION HOB + DISHWASHER (ADS1115 0x49, A1_GND)
 ####  - platform: !include 0x49_a1_induction.conf
 ##### 7. ATTIC (ADS1115 0x49, A2_GND)
