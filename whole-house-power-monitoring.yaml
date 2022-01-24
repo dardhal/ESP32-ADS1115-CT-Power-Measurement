@@ -363,10 +363,10 @@ sensor:
         return 0;
       }
       if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 * id(ac_a_powerdry_ct_sensor).state) );
+        return ( abs(230.0 * id(ac_a_powerdry_ct_sensor).state - 45) );
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdry_ct_sensor).state) );
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdry_ct_sensor).state - 45) );
       }
     accuracy_decimals: 1
     update_interval: 30s
@@ -446,10 +446,67 @@ sensor:
       - multiply: 0.001
 
 
-##### 6. INDUCTION HOB + DISHWASHER (ADS1115 0x49, A1_GND)
-####  - platform: !include 0x49_a1_induction.conf
+# 6. INDUCTION HOB + DISHWASHER (ADS1115 0x49, A1_GND)
+# 30 A / 1 V SCT-013 #2
+  - platform: ads1115
+    name: "Hob Dishwasher CT AC Voltage (0x49_A1_GND)"
+    multiplexer: 'A1_GND'
+    gain: 2.048
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 10s
+    accuracy_decimals: 4
+    state_class: measurement
+    device_class: voltage
+    unit_of_measurement: "V"
+    id: ac_v_hobdishwasher_adc_sensor
+    filters:
+      - throttle: 30s
+  
+  - platform: ct_clamp
+    name: "Hob Dishwasher AC Current"
+    sensor: ac_v_hobdishwasher_adc_sensor
+    accuracy_decimals: 2
+    sample_duration: 1000ms
+    update_interval: 10s
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: ac_a_hobdishwasher_ct_sensor
+    filters:
+      - calibrate_linear:
+        - 0.139 -> 4.16
+        - 0.252 -> 8.00
+      - throttle: 30s
+  
+  - platform: template
+    name: "Hob Dishwasher AC Power"
+    lambda: |-
+      if ( id(ac_a_hobdishwasher_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_hobdishwasher_ct_sensor).state) - 50 );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_hobdishwasher_ct_sensor).state) - 50 );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_hobdishwasher
+  
+  - platform: total_daily_energy
+    name: "Hob Dishwasher Energy Consumed"
+    power_id: ac_power_dampoven
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
 ##### 7. ATTIC (ADS1115 0x49, A2_GND)
-####  - platform: !include 0x49_a2_attic.conf
+# 5 A / 1 V SCT-013 #3
 ##### 8. BASEMENT (ADS1115 0x49, A3_GND)
-####  - platform: !include 0x49_a3_basement.conf
+# 10 A / 1 V SCT-013 #2
 
