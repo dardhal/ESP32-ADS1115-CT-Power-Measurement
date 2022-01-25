@@ -259,6 +259,7 @@ sensor:
 
 # 3. TELECOM/SENSORS + MVHR (ADS1115 0x48, A2_GND)
 # 5 A / 1 V SCT-013 #2
+# Includes telecom devices, living room TV and deco, DIY temp/RH sensors and (pending) MVHR
   - platform: ads1115
     name: "Telecom MVHR CT AC Voltage (0x48_A2_GND)"
     multiplexer: 'A2_GND'
@@ -321,6 +322,7 @@ sensor:
 
 # 4. POWER DRY (ADS1115 0x48, A3_GND)
 # 10 A / 1 V SCT-013 #1
+# Sockets in dry rooms, including home office and extractor hood
   - platform: ads1115
     name: "Power Dry CT AC Voltage (0x48_A3_GND)"
     multiplexer: 'A3_GND'
@@ -385,6 +387,7 @@ sensor:
 
 # 5. POWER DAMP + OVEN (ADS1115 0x49, A0_GND)
 # 30 A / 1 V SCT-013 #1
+# Sockets in damp rooms, including automation server, RPi, switch, etc.
   - platform: ads1115
     name: "Damp Oven CT AC Voltage (0x49_A0_GND)"
     multiplexer: 'A0_GND'
@@ -485,10 +488,10 @@ sensor:
         return 0;
       }
       if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 * id(ac_a_hobdishwasher_ct_sensor).state) - 50 );
+        return ( abs(230.0 * ( id(ac_a_hobdishwasher_ct_sensor).state - 0.2 ) ) );
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_hobdishwasher_ct_sensor).state) - 50 );
+        return ( abs(id(ha_ac_voltage).state * ( id(ac_a_hobdishwasher_ct_sensor).state - 0.2 ) ) );
       }
     accuracy_decimals: 1
     update_interval: 30s
@@ -499,7 +502,7 @@ sensor:
   
   - platform: total_daily_energy
     name: "Hob Dishwasher Energy Consumed"
-    power_id: ac_power_dampoven
+    power_id: ac_power_hobdishwasher
     unit_of_measurement: kWh
     filters:
       - multiply: 0.001

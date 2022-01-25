@@ -1,7 +1,5 @@
 * Get a reliable source for AC voltage to calculate power from
 
-* Pending to identify which circuit the extractor hood is connected to
-
 * Can't figure out a way to separate lengthy and mostly repetitive configuration blocks to separate files (!include)
 
 * It doesn't make any fucking sense the calibration options as they don't yield the expected results (could all measurements so far be so much off as those from the 10 A clamp?)
