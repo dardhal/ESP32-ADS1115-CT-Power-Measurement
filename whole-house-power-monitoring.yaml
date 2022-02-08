@@ -93,7 +93,7 @@ i2c:
   sda: GPIO21
   scl: GPIO22
   scan: true
-  frequency: 50kHz
+  frequency: 400kHz
   id: i2c_bus
 
 ads1115:
