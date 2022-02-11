@@ -26,11 +26,17 @@
 # 6. Inducción      : 30 A / 1 V SCT-013 #2
 #    Lavavajillas   : 
 # 
+##### 
+##### As per something read somewhere else, it may be possible to read incoming / outgoing power using
+##### a single SCT-013 and two ADS1115 ADC channels in differential mode, to calculate net power to / from grid
+##### Hence these two circuits, which are very low energy consumption, may be repurposed to something else
 # 7. Bajo Cubierta :  5 A / 1 V SCT-013 #3
 # 
 # 8. Bajo Vivienda : 10 A / 1 V SCT-013 #2
 #
-# Last Modified : 2022-01-22
+#####
+#
+# Last Modified : 2022-02-11
 #
 
 esphome:
@@ -512,4 +518,8 @@ sensor:
 # 5 A / 1 V SCT-013 #3
 ##### 8. BASEMENT (ADS1115 0x49, A3_GND)
 # 10 A / 1 V SCT-013 #2
+
+#### OR
+#### Differential input between A2_GND and A3_GND for + and - leads coming from SCT-013 CT, to measure net power in / out the grid
+####
 

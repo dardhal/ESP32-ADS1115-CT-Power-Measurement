@@ -1,0 +1,62 @@
+* Configure ESPhome sketch with default values for CT clamp
+
+* Connect to power monitoring rig
+
+* Measure calculated ct_clamp amps under given and known / reproducible load (leftmost column below)
+
+* Now connect CT clamp leads to multimeter in mV or V AC mode and measure under the same load conditions
+
+* CT clamp voltage output should be perfectly linear, so for a example, 500 mV on a 20 A clamp would be half of scale, or 10 Aac (or approximately 2400 W), see table below for 10 A clamp
+
+* Draw the values in a spreadsheet (scatter X/Y chart) and give it a try to different regression types (linear and polynomial) until finding the best one (ie. see ct_clamp_10a_calibration.ods)
+
+* Now configure the ESPhome sketch for the ct_clamp platform to use the regression type chosen and double check results are expected
+
+10 A CT CLAMP OUTPUT TOPS UP AT ~ 987 mV
+ct_clamp OUT //  SCT-013 output (mV), rest calculated
+-----------------------------------------------------
+0.026 Aac   //   30 mV -> 0.300 Aac ->   72 W (reposo)
+0.060 Aac   //   65 mV -> 0.650 Aac ->  156 W (+ monitor cocina)
+0.098 Aac   //  100 mV -> 1.000 Aac ->  240 W (++ PC Susi con 1 x CPU al 100%)
+0.710 Aac   //  485 mV -> 4.850 Aac -> 1165 W (++ calefactor en potencia 1)
+1.150 Aac   //  791 mV -> 7.910 Aac -> 1898 W (++ calefactor en potencia 2)
+
+
+NOW IF THIS WORKED AS EXPECTED....
+
+
+Another option could be as described in the following post :
+https://community.home-assistant.io/t/zmpt101b-precision-voltage-sensor-module/124617/7
+* Connect the SCT-013 voltage output to ADS1115 ADC channel
+* Calculate AC voltage (RMS == Root Mean Square), such as the ct_clamp sensor does
+* Map the calculated AC voltage (in the range of 0 - 1.0 Vac) to current depending on the specific SCT-013 (ie for a 20 A / 1 V sensor, 100 mV would map to 2 A in the measured circuit)
+* Then template to calculate instantaneous power and integrate over time (daily) would be the same
+
+It could be a good thing to create a separate git branch for this effort, to avoid having to merge code back and forth should things don't work well.
+
+Example code from the link with slight modifications and comments follows :
+"""
+sensor:
+  - platform: ads1115
+    name: "XXXX AC Current"
+    sample_duration: 1000ms
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    id: ac_a_fridge_ct_sensor
+    icon: "mdi:flash"
+    accuracy_decimals: 3
+    update_interval: 24ms
+    multiplexer: 'A0_GND'
+    gain: 2.048                               # SCT-013 output should be capped at 1 Vac (or +- 1.4 Vpp)
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC
+          send_every: 208                     #
+      - lambda: return sqrt(x);               ####
+      - multiply:  5.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
+#      - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
+#      - multiply: 15.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 15 A / 1 V CT clamp)
+#      - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
+"""
