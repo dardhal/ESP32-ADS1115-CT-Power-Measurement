@@ -68,7 +68,7 @@ When using this approach :
 - During idling (tested with the fridge circuit) there is slight current consumtion, confirmed by switching off circuit this to be noise
 - "Noise" or lack of precision varies over time, and can be compensated for in the current calculations with the ESPhome sensor before sending to Home Assistant
 - Power measured for the fridge is around 85 W whereas when using the ct_clamp approach it hovers around 100 W
-- "Noise" may be partially due to the fact we were using a small amount of "accuracy_decimals", which would result in rounding (ADCs are 16 bit or a range of 65536 values across +- 2.04 V)
+- "Noise" may be partially due to the fact we were using a small amount of "accuracy_decimals", which would result in rounding (ADCs are 16 bit or a range of 65536 values across +- 2.04 V). For example, for a 15 A sensor, 6 mV turns out to be 20 W, but the calculation for RMS (0.006 * 0.006) results in 0,000036, which needs at least 6 decimals, using 5 would result in artifacts
 
 It remains to be seen if by going this way for all circuits the measuring rig will continue working as good as in the case for a single circuit.
 
@@ -97,4 +97,10 @@ Final configuration for the "fridge" electrical circuit is shown below (commente
       - multiply:  5.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
       - lambda: if (x < 0.03) return 0.0; else return x;   #### To get rid of the low current noise measured in the circuit
 """
+
+
+Problem with this approach is ESP seems to be unable to keep up with calculations, and the more the circuits measured, the amount of samples per second starts to lag behind, with increasingly large errors, particularly so at lower currents. However, with "continuos_mode: off" measurements seem correct even without corrections.
+
+Worth mentioning the CT clamp attached to the induction hob reports 24 mV even when idle, even when measured using the RMS voltmeter.
+
 

@@ -36,7 +36,7 @@
 #
 #####
 #
-# Last Modified : 2022-02-11
+# Last Modified : 2022-02-12
 #
 
 esphome:
@@ -69,7 +69,7 @@ time:
 captive_portal:
 
 logger:
-  level: DEBUG
+  level: WARN
 
 api:
   password: !secret esphome_api_password
@@ -96,11 +96,11 @@ i2c:
 
 ads1115:
   - address: 0x48
-    continuous_mode: on
+    continuous_mode: off
     id: ads1115_bus_0x48
 
   - address: 0x49
-    continuous_mode: on
+    continuous_mode: off
     id: ads1115_bus_0x49
 
 
@@ -143,7 +143,7 @@ sensor:
     device_class: current
     unit_of_measurement: "A"
     icon: "mdi:flash"
-    accuracy_decimals: 5
+    accuracy_decimals: 8
     filters:
       - lambda: return x * x;                 ####
       - sliding_window_moving_average:        #
@@ -183,39 +183,26 @@ sensor:
 # 2. LIGHTING + WASHING MACHINE (ADS1115 0x48, A1_GND)
 # 15 A / 1 V SCT-013 #1
   - platform: ads1115
-    name: "Lighting Washing CT AC Voltage (0x48_A1_GND)"
     multiplexer: 'A1_GND'
     gain: 2.048
-    ads1115_id: ads1115_bus_0x48
-    update_interval: 10s
-    accuracy_decimals: 4
-    state_class: measurement
-    device_class: voltage
-    unit_of_measurement: "V"
-    id: ac_v_lighting_adc_sensor
-    filters:
-      - throttle: 30s
-  
-  - platform: ct_clamp
     name: "Lighting Washing AC Current"
-    sensor: ac_v_lighting_adc_sensor
-    accuracy_decimals: 2
-    sample_duration: 1000ms
-    update_interval: 10s
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms
+    id: ac_a_lighting_ct_sensor
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
-    id: ac_a_lighting_ct_sensor
+    icon: "mdi:flash"
+    accuracy_decimals: 8
     filters:
-      - calibrate_polynomial:
-          degree: 2
-          datapoints:
-            - 0.002 -> 0.000
-            - 0.009 -> 0.145
-            - 0.260 -> 4.160
-            - 0.965 -> 8.000
-      - throttle: 30s
-  
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply:  15.0                       # Mapping measured voltage from CT clamp to current in the primary circuit (for 15 A / 1 V CT clamp)
+      #- offset: -0.08
+
   - platform: template
     name: "Lighting Washing AC Power"
     lambda: |-
@@ -247,38 +234,25 @@ sensor:
 # 5 A / 1 V SCT-013 #2
 # Includes telecom devices, living room TV and deco, DIY temp/RH sensors and (pending) MVHR
   - platform: ads1115
-    name: "Telecom MVHR CT AC Voltage (0x48_A2_GND)"
     multiplexer: 'A2_GND'
     gain: 2.048
-    ads1115_id: ads1115_bus_0x48
-    update_interval: 10s
-    accuracy_decimals: 4
-    state_class: measurement
-    device_class: voltage
-    unit_of_measurement: "V"
-    id: ac_v_telecom_adc_sensor
-    filters:
-      - throttle: 30s
-  
-  - platform: ct_clamp
     name: "Telecom MVHR Washing AC Current"
-    sensor: ac_v_telecom_adc_sensor
-    accuracy_decimals: 2
-    sample_duration: 1000ms
-    update_interval: 10s
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms
+    id: ac_a_telecom_ct_sensor
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
-    id: ac_a_telecom_ct_sensor
+    icon: "mdi:flash"
+    accuracy_decimals: 8
     filters:
-      - calibrate_polynomial:
-          degree: 2
-          datapoints:
-            - 0.005 -> 0.000
-            - 0.027 -> 0.145
-            - 1.200 -> 4.220
-      - throttle: 30s
-  
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 5.0                         # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
+
   - platform: template
     name: "Telecom MVHR AC Power"
     lambda: |-
@@ -310,40 +284,25 @@ sensor:
 # 10 A / 1 V SCT-013 #1
 # Sockets in dry rooms, including home office and extractor hood
   - platform: ads1115
-    name: "Power Dry CT AC Voltage (0x48_A3_GND)"
     multiplexer: 'A3_GND'
     gain: 2.048
-    ads1115_id: ads1115_bus_0x48
-    update_interval: 10s
-    accuracy_decimals: 4
-    state_class: measurement
-    device_class: voltage
-    unit_of_measurement: "V"
-    id: ac_v_powerdry_adc_sensor
-    filters:
-      - throttle: 30s
-  
-  - platform: ct_clamp
     name: "Power Dry AC Current"
-    sensor: ac_v_powerdry_adc_sensor
-    accuracy_decimals: 2
-    sample_duration: 1000ms
-    update_interval: 10s
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms
+    id: ac_a_powerdry_ct_sensor
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
-    id: ac_a_powerdry_ct_sensor
+    icon: "mdi:flash"
+    accuracy_decimals: 8
     filters:
-      - calibrate_polynomial:
-          degree: 3
-          datapoints:
-            - 0.026 -> 0.30
-            - 0.060 -> 0.65
-            - 0.098 -> 1.00
-            - 0.710 -> 4.85
-            - 1.150 -> 7.91
-      - throttle: 30s
-  
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
+
   - platform: template
     name: "Power Dry AC Power"
     lambda: |-
@@ -351,10 +310,10 @@ sensor:
         return 0;
       }
       if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 * id(ac_a_powerdry_ct_sensor).state - 45) );
+        return ( abs(230.0 * id(ac_a_powerdry_ct_sensor).state ) );
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdry_ct_sensor).state - 45) );
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdry_ct_sensor).state ) );
       }
     accuracy_decimals: 1
     update_interval: 30s
@@ -375,39 +334,25 @@ sensor:
 # 30 A / 1 V SCT-013 #1
 # Sockets in damp rooms, including automation server, RPi, switch, etc.
   - platform: ads1115
-    name: "Damp Oven CT AC Voltage (0x49_A0_GND)"
     multiplexer: 'A0_GND'
     gain: 2.048
-    ads1115_id: ads1115_bus_0x49
-    update_interval: 10s
-    accuracy_decimals: 4
-    state_class: measurement
-    device_class: voltage
-    unit_of_measurement: "V"
-    id: ac_v_dampoven_adc_sensor
-    filters:
-      - throttle: 30s
-  
-  - platform: ct_clamp
     name: "Damp Oven AC Current"
-    sensor: ac_v_dampoven_adc_sensor
-    accuracy_decimals: 2
-    sample_duration: 1000ms
-    update_interval: 10s
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_dampoven_ct_sensor
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
-    id: ac_a_dampoven_ct_sensor
+    icon: "mdi:flash"
+    accuracy_decimals: 8
     filters:
-      - calibrate_polynomial:
-          degree: 2
-          datapoints:
-            - 0.001 -> 0.00
-            - 0.004 -> 0.15
-            - 0.139 -> 4.16
-            - 0.252 -> 8.00
-      - throttle: 30s
-  
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
+
   - platform: template
     name: "Damp Oven AC Power"
     lambda: |-
@@ -438,35 +383,25 @@ sensor:
 # 6. INDUCTION HOB + DISHWASHER (ADS1115 0x49, A1_GND)
 # 30 A / 1 V SCT-013 #2
   - platform: ads1115
-    name: "Hob Dishwasher CT AC Voltage (0x49_A1_GND)"
     multiplexer: 'A1_GND'
     gain: 2.048
-    ads1115_id: ads1115_bus_0x49
-    update_interval: 10s
-    accuracy_decimals: 4
-    state_class: measurement
-    device_class: voltage
-    unit_of_measurement: "V"
-    id: ac_v_hobdishwasher_adc_sensor
-    filters:
-      - throttle: 30s
-  
-  - platform: ct_clamp
     name: "Hob Dishwasher AC Current"
-    sensor: ac_v_hobdishwasher_adc_sensor
-    accuracy_decimals: 2
-    sample_duration: 1000ms
-    update_interval: 10s
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_hobdishwasher_ct_sensor
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
-    id: ac_a_hobdishwasher_ct_sensor
+    icon: "mdi:flash"
+    accuracy_decimals: 8
     filters:
-      - calibrate_linear:
-        - 0.139 -> 4.16
-        - 0.252 -> 8.00
-      - throttle: 30s
-  
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
+
   - platform: template
     name: "Hob Dishwasher AC Power"
     lambda: |-
@@ -474,10 +409,10 @@ sensor:
         return 0;
       }
       if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 * ( id(ac_a_hobdishwasher_ct_sensor).state - 0.2 ) ) );
+        return ( abs(230.0 *  id(ac_a_hobdishwasher_ct_sensor).state ) );
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * ( id(ac_a_hobdishwasher_ct_sensor).state - 0.2 ) ) );
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_hobdishwasher_ct_sensor).state ) );
       }
     accuracy_decimals: 1
     update_interval: 30s
