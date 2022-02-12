@@ -69,7 +69,7 @@ time:
 captive_portal:
 
 logger:
-  level: VERBOSE
+  level: DEBUG
 
 api:
   password: !secret esphome_api_password
@@ -83,14 +83,6 @@ web_server:
   auth:
     username: !secret esphome_web_server_username
     password: !secret esphome_web_server_password
-
-####mqtt:
-####  broker: 192.168.1.100
-####  port: 1883
-####  discovery: True
-####  discovery_retain: True
-####  discovery_prefix: "homeassistant"
-####  topic_prefix: home/indoors/mechanical_room/home_power_monitoring
 
 
 # Create single I2C bus where both ADS1115 at addresses 0x48 and 0x49 will be used and
@@ -141,38 +133,26 @@ sensor:
 # 1. FRIDGE (ADS1115 0x48 , A0_GND)
 # 5 A / 1 V SCT-013 #1
   - platform: ads1115
-    name: "Fridge CT AC Voltage (0x48_A0_GND)"
     multiplexer: 'A0_GND'
     gain: 2.048
-    ads1115_id: ads1115_bus_0x48
-    update_interval: 10s
-    accuracy_decimals: 4
-    state_class: measurement
-    device_class: voltage
-    unit_of_measurement: "V"
-    id: ac_v_fridge_adc_sensor
-    filters:
-      - throttle: 30s
-  
-  - platform: ct_clamp
     name: "Fridge AC Current"
-    sensor: ac_v_fridge_adc_sensor
-    accuracy_decimals: 2
-    sample_duration: 1000ms
-    update_interval: 10s
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms
+    id: ac_a_fridge_ct_sensor
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
-    id: ac_a_fridge_ct_sensor
+    icon: "mdi:flash"
+    accuracy_decimals: 5
     filters:
-      - calibrate_polynomial:
-          degree: 2
-          datapoints:
-            - 0.005 -> 0.000
-            - 0.027 -> 0.145
-            - 1.200 -> 4.220
-      - throttle: 30s
-  
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply:  5.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
+      #- lambda: if (x < 0.03) return 0.0; else return x;
+
   - platform: template
     name: "Fridge AC Power"
     lambda: |-

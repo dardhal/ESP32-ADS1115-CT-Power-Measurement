@@ -60,3 +60,41 @@ sensor:
 #      - multiply: 15.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 15 A / 1 V CT clamp)
 #      - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
 """
+
+When using this approach :
+- It is easy to get current sampled every few seconds
+- Values perfectly map those obtained with the true RMS voltmeter on the leads coming from the SCT itself
+- Measurements seem to be smoother using this approach than when using the ct_clamp component
+- During idling (tested with the fridge circuit) there is slight current consumtion, confirmed by switching off circuit this to be noise
+- "Noise" or lack of precision varies over time, and can be compensated for in the current calculations with the ESPhome sensor before sending to Home Assistant
+- Power measured for the fridge is around 85 W whereas when using the ct_clamp approach it hovers around 100 W
+- "Noise" may be partially due to the fact we were using a small amount of "accuracy_decimals", which would result in rounding (ADCs are 16 bit or a range of 65536 values across +- 2.04 V)
+
+It remains to be seen if by going this way for all circuits the measuring rig will continue working as good as in the case for a single circuit.
+
+Final configuration for the "fridge" electrical circuit is shown below (commented) :
+"""
+# 1. FRIDGE (ADS1115 0x48 , A0_GND)
+# 5 A / 1 V SCT-013 #1
+  - platform: ads1115
+    multiplexer: 'A0_GND'
+    gain: 2.048
+    name: "Fridge AC Current"
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms                     # How often to check the value from the ADS1115 ADC (approx. 41 times per second)
+    id: ac_a_fridge_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 5                      # Need to use this many decimals because ADC is 16 bit and else rounding errors would result in "noise" at low currents
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # Thi blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 1250 samples, 30 seconds, and reports every 625, every 15 seconds)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply:  5.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
+      - lambda: if (x < 0.03) return 0.0; else return x;   #### To get rid of the low current noise measured in the circuit
+"""
+
