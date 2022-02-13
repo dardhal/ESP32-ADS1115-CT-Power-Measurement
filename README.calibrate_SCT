@@ -99,8 +99,11 @@ Final configuration for the "fridge" electrical circuit is shown below (commente
 """
 
 
-Problem with this approach is ESP seems to be unable to keep up with calculations, and the more the circuits measured, the amount of samples per second starts to lag behind, with increasingly large errors, particularly so at lower currents. However, with "continuos_mode: off" measurements seem correct even without corrections.
+Problem with this approach is ESP seems to be unable to keep up with calculations, and the more the circuits measured, the amount of samples per second starts to lag behind, with increasingly large errors, particularly so at lower currents. However, with "continuos_mode: off" measurements seem correct even without corrections, except for hob (see below).
 
-Worth mentioning the CT clamp attached to the induction hob reports 24 mV even when idle, even when measured using the RMS voltmeter.
+Worth mentioning the CT clamp attached to the induction hob reports 24 mV even when idle, even when measured using the RMS voltmeter : 
+* For ct_clamp sensor, results in a 0.23 A -> 56 W measurement
+* For alternative method (even being the only circuit plugged in) results in 0.72 A -> 175 W measurement
+
 
 

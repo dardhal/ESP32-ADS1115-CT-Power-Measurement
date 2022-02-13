@@ -84,6 +84,9 @@ web_server:
     username: !secret esphome_web_server_username
     password: !secret esphome_web_server_password
 
+sun:
+  latitude: 40.35°
+  longitude: -4.05°
 
 # Create single I2C bus where both ADS1115 at addresses 0x48 and 0x49 will be used and
 # instantiate the two ADC boards (hubs) at their corresponding addresses
@@ -163,7 +166,7 @@ sensor:
         return ( abs(230.0 * id(ac_a_fridge_ct_sensor).state) );
       }
       else {
-        return ( abs( id(ha_ac_voltage).state * id(ac_a_fridge_ct_sensor).state) );
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_fridge_ct_sensor).state) );
       }
     accuracy_decimals: 1
     update_interval: 30s
@@ -201,7 +204,6 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply:  15.0                       # Mapping measured voltage from CT clamp to current in the primary circuit (for 15 A / 1 V CT clamp)
-      #- offset: -0.08
 
   - platform: template
     name: "Lighting Washing AC Power"
@@ -252,6 +254,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 5.0                         # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
+      - offset: -0.05                         # Approximate current measured in excess
 
   - platform: template
     name: "Telecom MVHR AC Power"
@@ -302,6 +305,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
+      - offset: -0.1                          # Approximate current measured in excess
 
   - platform: template
     name: "Power Dry AC Power"
@@ -352,6 +356,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
+      - offset: -0.05                         # Approximate current measured in excess
 
   - platform: template
     name: "Damp Oven AC Power"
@@ -401,6 +406,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
+      - lambda: if (x < 0.75) return 0.0; else return x;
 
   - platform: template
     name: "Hob Dishwasher AC Power"
@@ -438,3 +444,26 @@ sensor:
 #### Differential input between A2_GND and A3_GND for + and - leads coming from SCT-013 CT, to measure net power in / out the grid
 ####
 
+#### FAKE 01 : MVHR (until a time this is being measured using a CT clamp)
+  - platform: template
+    name: "MVHR Fake AC Power"
+    lambda: |-
+      return 16.0;
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_mvhr_fake
+  
+  - platform: total_daily_energy
+    name: "MVHR Fake Energy Consumed"
+    power_id: ac_power_mvhr_fake
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+#### FAKE 02 : Entrance Outdoor Lights
+#### TBD
+#
