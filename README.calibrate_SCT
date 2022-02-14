@@ -107,3 +107,11 @@ Worth mentioning the CT clamp attached to the induction hob reports 24 mV even w
 
 
 
+Regarding ADS1115 ADC and continuous_mode :
+https://cdn-learn.adafruit.com/downloads/pdf/adafruit-4-channel-adc-breakouts.pdf
+"""
+In continuous mode, the board will read the latest value that the ADS1x15 device has converted.
+This is faster as it does not have to wait for the ADC to finish converting the value, 
+but it only really works when reading data from one of the four pins on the ADC. 
+"""
+
