@@ -38,6 +38,11 @@
 #
 # Last Modified : 2022-02-12
 #
+globals:
+  - id: basement_power
+    type: float
+    restore_value: true
+    initial_value: '5.0'
 
 esphome:
   name: power-monitoring
@@ -84,9 +89,20 @@ web_server:
     username: !secret esphome_web_server_username
     password: !secret esphome_web_server_password
 
+
 sun:
   latitude: 40.35°
   longitude: -4.05°
+  on_sunrise:
+    then:
+      - globals.set:
+          id: basement_power
+          value: '5.0'
+  on_sunset:
+    then:
+      - globals.set:
+          id: basement_power
+          value: '18.0'
 
 # Create single I2C bus where both ADS1115 at addresses 0x48 and 0x49 will be used and
 # instantiate the two ADC boards (hubs) at their corresponding addresses
@@ -154,7 +170,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply:  5.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
-      #- lambda: if (x < 0.03) return 0.0; else return x;
+      - lambda: if (x < 0.03) return 0.0; else return x;
 
   - platform: template
     name: "Fridge AC Power"
@@ -435,14 +451,60 @@ sensor:
       - multiply: 0.001
 
 
-##### 7. ATTIC (ADS1115 0x49, A2_GND)
-# 5 A / 1 V SCT-013 #3
-##### 8. BASEMENT (ADS1115 0x49, A3_GND)
+# 7 & 8 Differential readings between A2 and A3 for net metering (ADS1115 0x49, A2_A3)
 # 10 A / 1 V SCT-013 #2
+  - platform: ads1115
+    multiplexer: 'A2_A3'
+    gain: 2.048
+    name: "Net Power AC Current"
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_netpower_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
 
-#### OR
-#### Differential input between A2_GND and A3_GND for + and - leads coming from SCT-013 CT, to measure net power in / out the grid
-####
+  - platform: template
+    name: "Net Power AC Power"
+    lambda: |-
+      if ( id(ac_a_netpower_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 *  id(ac_a_netpower_ct_sensor).state ) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_netpower_ct_sensor).state ) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_netpower
+  
+  - platform: total_daily_energy
+    name: "Net Energy To / From Grid"
+    power_id: ac_power_netpower
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+#### Considering the ESP32 lack of linearity at low values would not be a problem for some circuits (over / hob), could be used to have more measured circuits
+#### ADCs in the ESP32 also may or may not be adequate to measure an input from a ZMPT101B AC transformer and have a reliable AC voltage source running off ESPhome
+#### A good candidate may be the oven, for which a 10 A CT clamp would (may) be sufficient, and linearity is not a problem as consumption is resistive and completely ON / OFF
+
+
 
 #### FAKE 01 : MVHR (until a time this is being measured using a CT clamp)
   - platform: template
@@ -465,5 +527,21 @@ sensor:
 
 
 #### FAKE 02 : Entrance Outdoor Lights
-#### TBD
-#
+  - platform: template
+    name: "Basement Fake AC Power"
+    lambda: |-
+      return id(basement_power);
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_basement_fake
+  
+  - platform: total_daily_energy
+    name: "Basement Fake Energy Consumed"
+    power_id: ac_power_basement_fake
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
