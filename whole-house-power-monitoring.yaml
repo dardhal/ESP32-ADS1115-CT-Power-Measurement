@@ -476,14 +476,11 @@ sensor:
   - platform: template
     name: "Net Power AC Power"
     lambda: |-
-      if ( id(ac_a_netpower_ct_sensor).state < 0 ) {
-        return 0;
-      }
       if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 *  id(ac_a_netpower_ct_sensor).state ) );
+        return ( 230.0 *  id(ac_a_netpower_ct_sensor).state );
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_netpower_ct_sensor).state ) );
+        return ( id(ha_ac_voltage).state * id(ac_a_netpower_ct_sensor).state );
       }
     accuracy_decimals: 1
     update_interval: 30s
