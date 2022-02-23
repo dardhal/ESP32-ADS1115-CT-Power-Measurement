@@ -16,27 +16,24 @@
 #    Lavadora       :
 # 
 # 3. Telecom.+Sensor: 5 A / 1 V SCT-013 #2
-#    Ventilación    : <<-- pending
 # 
 # 4. Fuerza Seco    : 10 A / 1 V SCT-013 #1
 # 
 # 5. Fuerza Húmedos : 30 A / 1 V SCT-013 #1 (incl. Domótica)
-#    Horno          :
 # 
 # 6. Inducción      : 30 A / 1 V SCT-013 #2
-#    Lavavajillas   : 
 # 
-##### 
-##### As per something read somewhere else, it may be possible to read incoming / outgoing power using
-##### a single SCT-013 and two ADS1115 ADC channels in differential mode, to calculate net power to / from grid
-##### Hence these two circuits, which are very low energy consumption, may be repurposed to something else
-# 7. Bajo Cubierta :  5 A / 1 V SCT-013 #3
-# 
-# 8. Bajo Vivienda : 10 A / 1 V SCT-013 #2
+# x. Bajo Cubierta :  5 A / 1 V SCT-013 (PENDING)
+# x. Bajo Vivienda : 10 A / 1 V SCT-013 (PENDING)
+# x. Lavavajillas  : 10 A / 1 V SCT-013 (PENDING)
+# x. Horno         : 10 A / 1 V SCT-013 (PENDING)
+#
+#### Considering the ESP32 lack of linearity at low values would not be a problem for some circuits (oven / dishwasher), could be used to have more measured circuits
+#### ADCs in the ESP32 also may or may not be adequate to measure an input from a ZMPT101B AC transformer and have a reliable AC voltage source running off ESPhome
 #
 #####
 #
-# Last Modified : 2022-02-12
+# Last Modified : 2022-02-23
 #
 globals:
   - id: basement_power
@@ -449,58 +446,6 @@ sensor:
     unit_of_measurement: kWh
     filters:
       - multiply: 0.001
-
-
-# 7 & 8 Differential readings between A2 and A3 for net metering (ADS1115 0x49, A2_A3)
-# 10 A / 1 V SCT-013 #2
-  - platform: ads1115
-    multiplexer: 'A2_A3'
-    gain: 2.048
-    name: "Net Power AC Current"
-    ads1115_id: ads1115_bus_0x49
-    update_interval: 24ms
-    id: ac_a_netpower_ct_sensor
-    state_class: measurement
-    device_class: current
-    unit_of_measurement: "A"
-    icon: "mdi:flash"
-    accuracy_decimals: 8
-    filters:
-      - lambda: return x * x;                 ####
-      - sliding_window_moving_average:        #
-          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
-          send_every:  625                    #
-      - lambda: return sqrt(x);               ####
-      - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
-
-  - platform: template
-    name: "Net Power AC Power"
-    lambda: |-
-      if ( id(ha_ac_voltage).state < 180 ) {
-        return ( 230.0 *  id(ac_a_netpower_ct_sensor).state );
-      }
-      else {
-        return ( id(ha_ac_voltage).state * id(ac_a_netpower_ct_sensor).state );
-      }
-    accuracy_decimals: 1
-    update_interval: 30s
-    state_class: measurement
-    device_class: power
-    unit_of_measurement: "W"
-    id: ac_power_netpower
-  
-  - platform: total_daily_energy
-    name: "Net Energy To / From Grid"
-    power_id: ac_power_netpower
-    unit_of_measurement: kWh
-    filters:
-      - multiply: 0.001
-
-
-#### Considering the ESP32 lack of linearity at low values would not be a problem for some circuits (over / hob), could be used to have more measured circuits
-#### ADCs in the ESP32 also may or may not be adequate to measure an input from a ZMPT101B AC transformer and have a reliable AC voltage source running off ESPhome
-#### A good candidate may be the oven, for which a 10 A CT clamp would (may) be sufficient, and linearity is not a problem as consumption is resistive and completely ON / OFF
-
 
 
 #### FAKE 01 : MVHR (until a time this is being measured using a CT clamp)
