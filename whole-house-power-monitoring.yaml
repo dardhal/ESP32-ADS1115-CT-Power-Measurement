@@ -23,14 +23,21 @@
 # 
 # 6. Inducción      : 30 A / 1 V SCT-013 #2
 # 
+# 7. Horno          : 10 A / 1 V SCT-013 #2
+#
+# 8. Lavavajillas  :   5 A / 1 V SCT-013 #3
+#
 # x. Bajo Cubierta :  5 A / 1 V SCT-013 (PENDING)
 # x. Bajo Vivienda : 10 A / 1 V SCT-013 (PENDING)
-# x. Lavavajillas  : 10 A / 1 V SCT-013 (PENDING)
-# x. Horno         : 10 A / 1 V SCT-013 (PENDING)
 #
 #### Considering the ESP32 lack of linearity at low values would not be a problem for some circuits (oven / dishwasher), could be used to have more measured circuits
 #### ADCs in the ESP32 also may or may not be adequate to measure an input from a ZMPT101B AC transformer and have a reliable AC voltage source running off ESPhome
 #
+# TODO : once oven (7) and dishwasher (8) are added in separately, modify existing measurements for correct and meaningful names, even at the expense of throwing away previous measurements
+#
+# NOTE : Horno (7) induces a significant amount on other circuits, namely :
+#   Fuerza Húmedos (5), at around 80 W : no adjustment necessary (can be made later based upon status of Horno (7) to substract some Watts
+#   Inducción (6), enough to get past the 0.75 A threshold below which we report zero : just raising the threshold a bit more
 #####
 #
 # Last Modified : 2022-02-23
@@ -38,19 +45,15 @@
 globals:
   - id: basement_power
     type: float
-    restore_value: true
     initial_value: '5.0'
   - id: entrance_lights_power
     type: float
-    restore_value: true
     initial_value: '0.0'
   - id: east_lights_power
     type: float
-    restore_value: true
     initial_value: '0.0'
   - id: west_lights_power
     type: float
-    restore_value: true
     initial_value: '0.0'
 
 esphome:
@@ -459,7 +462,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
-      - lambda: if (x < 0.75) return 0.0; else return x;
+      - lambda: if (x < 0.80) return 0.0; else return x;  #### Offsetting "noise" in the circuit
 
   - platform: template
     name: "Hob Dishwasher AC Power"
@@ -483,6 +486,105 @@ sensor:
   - platform: total_daily_energy
     name: "Hob Dishwasher Energy Consumed"
     power_id: ac_power_hobdishwasher
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+# 7. OVEN (ADS1115 0x49, A2_GND)
+# 10 A / 1 V SCT-013 #2
+  - platform: ads1115
+    multiplexer: 'A2_GND'
+    gain: 2.048
+    name: "Oven AC Current"
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_oven_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
+      - lambda: if (x < 0.05) return 0.0; else return x;
+
+  - platform: template
+    name: "Oven AC Power"
+    lambda: |-
+      if ( id(ac_a_oven_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 *  id(ac_a_oven_ct_sensor).state ) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_oven_ct_sensor).state ) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_oven
+  
+  - platform: total_daily_energy
+    name: "Oven Energy Consumed"
+    power_id: ac_power_oven
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+# 8. Dishwasher (ADS1115 0x49, A2_GND)
+# 5 A / 1 V SCT-013 #3
+  - platform: ads1115
+    multiplexer: 'A3_GND'
+    gain: 4.096
+    name: "Dishwasher AC Current"
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_dishwasher_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 5.0                         # Mapping measured voltage from CT clamp to current in the primary circuit (for 5 A / 1 V CT clamp)
+
+  - platform: template
+    name: "Dishwasher AC Power"
+    lambda: |-
+      if ( id(ac_a_dishwasher_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 *  id(ac_a_dishwasher_ct_sensor).state ) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_dishwasher_ct_sensor).state ) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_dishwasher
+  
+  - platform: total_daily_energy
+    name: "Dishwasher Energy Consumed"
+    power_id: ac_power_dishwasher
     unit_of_measurement: kWh
     filters:
       - multiply: 0.001
