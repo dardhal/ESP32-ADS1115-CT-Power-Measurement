@@ -38,8 +38,19 @@
 globals:
   - id: basement_power
     type: float
-    restore_value: true
     initial_value: '5.0'
+  - id: entrance_lights_power
+    type: float
+    restore_value: true
+    initial_value: '0.0'
+  - id: east_lights_power
+    type: float
+    restore_value: true
+    initial_value: '0.0'
+  - id: west_lights_power
+    type: float
+    restore_value: true
+    initial_value: '0.0'
 
 esphome:
   name: power-monitoring
@@ -90,16 +101,6 @@ web_server:
 sun:
   latitude: 40.35°
   longitude: -4.05°
-  on_sunrise:
-    then:
-      - globals.set:
-          id: basement_power
-          value: '5.0'
-  on_sunset:
-    then:
-      - globals.set:
-          id: basement_power
-          value: '18.0'
 
 # Create single I2C bus where both ADS1115 at addresses 0x48 and 0x49 will be used and
 # instantiate the two ADC boards (hubs) at their corresponding addresses
@@ -128,6 +129,44 @@ switch:
 binary_sensor:
   - platform: status
     name: "Home Power Monitoring Status"
+
+text_sensor:
+  - platform: homeassistant
+    entity_id: switch.sonoff_basic_01
+    id: entrance_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(entrance_lights_power) = 12.0;
+          }
+          else {
+            id(entrance_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.attic_relay_east_3
+    id: east_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(east_lights_power) = 30.0;
+          }
+          else {
+            id(east_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.attic_relay_west_3
+    id: west_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(west_lights_power) = 20.0;
+          }
+          else {
+            id(west_lights_power) = 0.0;
+          }
 
 sensor:
   - platform: wifi_signal
@@ -468,21 +507,21 @@ sensor:
       - multiply: 0.001
 
 
-#### FAKE 02 : Entrance Outdoor Lights
+#### FAKE 02 : Outdoors consumption (hAP mini, entrance lights, and East / West lights)
   - platform: template
-    name: "Basement Fake AC Power"
+    name: "Outdoors Fake AC Power"
     lambda: |-
-      return id(basement_power);
+      return ( id(basement_power) + id(entrance_lights_power) + id(east_lights_power) + id(west_lights_power) );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
     device_class: power
     unit_of_measurement: "W"
-    id: ac_power_basement_fake
+    id: ac_power_outdoors_fake
   
   - platform: total_daily_energy
-    name: "Basement Fake Energy Consumed"
-    power_id: ac_power_basement_fake
+    name: "Outdoors Fake Energy Consumed"
+    power_id: ac_power_outdoors_fake
     unit_of_measurement: kWh
     filters:
       - multiply: 0.001
