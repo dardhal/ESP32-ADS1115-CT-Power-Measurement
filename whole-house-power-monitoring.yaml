@@ -38,6 +38,7 @@
 globals:
   - id: basement_power
     type: float
+    restore_value: true
     initial_value: '5.0'
   - id: entrance_lights_power
     type: float
