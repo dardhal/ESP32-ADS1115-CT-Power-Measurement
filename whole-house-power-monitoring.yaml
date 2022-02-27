@@ -562,6 +562,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 5.0                         # Mapping measured voltage from CT clamp to current in the primary circuit (for 5 A / 1 V CT clamp)
+      - lambda: if (x < 0.05) return 0.0; else return x;
 
   - platform: template
     name: "Dishwasher AC Power"
