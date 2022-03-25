@@ -25,7 +25,7 @@
 # 
 # 7. Horno          : 10 A / 1 V SCT-013 #2
 #
-# 8. Lavavajillas  :  10 A / 1 V SCT-013 #3
+# 8. Lavavajillas  :   5 A / 1 V SCT-013 #3
 #
 # x. Bajo Cubierta :  5 A / 1 V SCT-013 (PENDING)
 # x. Bajo Vivienda : 10 A / 1 V SCT-013 (PENDING)
@@ -33,19 +33,14 @@
 #### Considering the ESP32 lack of linearity at low values would not be a problem for some circuits (oven / dishwasher), could be used to have more measured circuits
 #### ADCs in the ESP32 also may or may not be adequate to measure an input from a ZMPT101B AC transformer and have a reliable AC voltage source running off ESPhome
 #
+# TODO : once oven (7) and dishwasher (8) are added in separately, modify existing measurements for correct and meaningful names, even at the expense of throwing away previous measurements
+#
 # NOTE : Horno (7) induces a significant amount on other circuits, namely :
 #   Fuerza Húmedos (5), at around 80 W : no adjustment necessary (can be made later based upon status of Horno (7) to substract some Watts
 #   Inducción (6), enough to get past the 0.75 A threshold below which we report zero : just raising the threshold a bit more
-# NOTE: Lavavajillas (8) also induces current on other circuits, namely :
-#   Inducción (6) : hasta 220 W (1 A)
-#   Horno (7) : hasta 70 W
-# TODO : apply offsets to compensate for induced current based on current being present on those causing the "interference"
-#
-# TODO : once oven (7) and dishwasher (8) are added in separately, modify existing measurements for correct and meaningful names, even at the expense of throwing away previous measurements
-#
 #####
 #
-# Last Modified : 2022-03-23
+# Last Modified : 2022-02-23
 #
 globals:
   - id: basement_power
@@ -467,7 +462,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
-      - lambda: if (x < 1.0) return 0.0; else return x;  #### Offsetting "noise" in the circuit induced by others
+      - lambda: if (x < 0.80) return 0.0; else return x;  #### Offsetting "noise" in the circuit
 
   - platform: template
     name: "Hob Dishwasher AC Power"
@@ -517,7 +512,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
-      - lambda: if (x < 0.25) return 0.0; else return x;
+      - lambda: if (x < 0.05) return 0.0; else return x;
 
   - platform: template
     name: "Oven AC Power"
@@ -547,10 +542,10 @@ sensor:
 
 
 # 8. Dishwasher (ADS1115 0x49, A2_GND)
-# 10 A / 1 V SCT-013 #3
+# 5 A / 1 V SCT-013 #3
   - platform: ads1115
     multiplexer: 'A3_GND'
-    gain: 2.048
+    gain: 4.096
     name: "Dishwasher AC Current"
     ads1115_id: ads1115_bus_0x49
     update_interval: 24ms
@@ -566,7 +561,7 @@ sensor:
           window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
-      - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
+      - multiply: 5.0                         # Mapping measured voltage from CT clamp to current in the primary circuit (for 5 A / 1 V CT clamp)
       - lambda: if (x < 0.05) return 0.0; else return x;
 
   - platform: template
