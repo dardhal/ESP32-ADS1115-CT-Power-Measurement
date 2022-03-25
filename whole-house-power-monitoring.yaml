@@ -38,9 +38,10 @@
 # NOTE : Horno (7) induces a significant amount on other circuits, namely :
 #   Fuerza Húmedos (5), at around 80 W : no adjustment necessary (can be made later based upon status of Horno (7) to substract some Watts
 #   Inducción (6), enough to get past the 0.75 A threshold below which we report zero : just raising the threshold a bit more
+# NOTE / TODO : tried using a 10 A CT for dishwasher but it seemed to be broken, so using a 5 A with different amplification, which may or may not give accurate results
 #####
 #
-# Last Modified : 2022-02-23
+# Last Modified : 2022-03-25
 #
 globals:
   - id: basement_power
