@@ -38,6 +38,8 @@
 # NOTE : Horno (7) induces a significant amount on other circuits, namely :
 #   Fuerza Húmedos (5), at around 80 W : no adjustment necessary (can be made later based upon status of Horno (7) to substract some Watts
 #   Inducción (6), enough to get past the 0.75 A threshold below which we report zero : just raising the threshold a bit more
+#
+# NOTE : Horno (7) also induces current linearly onto dishwasher (8) and hence consumption for the latter must be compensated for (up to 30 W approximately)
 # NOTE / TODO : tried using a 10 A CT for dishwasher but it seemed to be broken, so using a 5 A with different amplification, which may or may not give accurate results
 #####
 #
@@ -56,6 +58,9 @@ globals:
   - id: west_lights_power
     type: float
     initial_value: '0.0'
+  - id: mvhr_power_multiplier
+    type: float
+    initial_value: '1.0'
 
 esphome:
   name: power-monitoring
@@ -171,6 +176,18 @@ text_sensor:
           }
           else {
             id(west_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.control_remoto_on_off_comfoair
+    id: mvhr_switch_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(mvhr_power_multiplier) = 1.0;
+          }
+          else {
+            id(mvhr_power_multiplier) = 0.0;
           }
 
 sensor:
@@ -563,7 +580,7 @@ sensor:
           send_every:  625                    #
       - lambda: return sqrt(x);               ####
       - multiply: 5.0                         # Mapping measured voltage from CT clamp to current in the primary circuit (for 5 A / 1 V CT clamp)
-      - lambda: if (x < 0.05) return 0.0; else return x;
+      - lambda: if (x < 0.15) return 0.0; else return x;
 
   - platform: template
     name: "Dishwasher AC Power"
@@ -596,7 +613,7 @@ sensor:
   - platform: template
     name: "MVHR Fake AC Power"
     lambda: |-
-      return 16.0;
+      return ( id(mvhr_power_multiplier) * 16.0 );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
