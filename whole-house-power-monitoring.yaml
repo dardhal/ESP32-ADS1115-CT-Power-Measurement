@@ -101,16 +101,12 @@ ota:
   safe_mode: True
   password: !secret esphome_ota_password
 
-web_server:
-  port: 8888
-  auth:
-    username: !secret esphome_web_server_username
-    password: !secret esphome_web_server_password
+#web_server:
+#  port: 8888
+#  auth:
+#    username: !secret esphome_web_server_username
+#    password: !secret esphome_web_server_password
 
-
-sun:
-  latitude: 40.35°
-  longitude: -4.05°
 
 # Create single I2C bus where both ADS1115 at addresses 0x48 and 0x49 will be used and
 # instantiate the two ADC boards (hubs) at their corresponding addresses
@@ -130,8 +126,6 @@ ads1115:
     continuous_mode: off
     id: ads1115_bus_0x49
 
-
-# Board monitoring and power cycling
 switch:
   - platform: restart
     name: "Home Power Monitoring Restart"
@@ -140,6 +134,8 @@ binary_sensor:
   - platform: status
     name: "Home Power Monitoring Status"
 
+
+# Power consumption for devices with no measurement hardware in place, from HA status entities
 text_sensor:
   - platform: homeassistant
     entity_id: switch.sonoff_basic_01
@@ -205,8 +201,8 @@ sensor:
     filters:
       - offset: 12.0
 
-#### Sensor definitions for each of the monitored circuits in separate files for readability
 
+#### Sensor definitions for each of the monitored circuits in separate files for readability
 # 1. FRIDGE (ADS1115 0x48 , A0_GND)
 # 5 A / 1 V SCT-013 #1
   - platform: ads1115
@@ -306,13 +302,13 @@ sensor:
       - multiply: 0.001
 
 
-# 3. TELECOM/SENSORS + MVHR (ADS1115 0x48, A2_GND)
+# 3. TELECOM/SENSORS (ADS1115 0x48, A2_GND)
 # 5 A / 1 V SCT-013 #2
-# Includes telecom devices, living room TV and deco, DIY temp/RH sensors and (pending) MVHR
+# Includes devices under TELECOM : living room TV and deco, DIY temp/RH sensors, Alexa, 12 VDC TV feed and zigbee router
   - platform: ads1115
     multiplexer: 'A2_GND'
     gain: 2.048
-    name: "Telecom MVHR Washing AC Current"
+    name: "Telecom Sensors AC Current"
     ads1115_id: ads1115_bus_0x48
     update_interval: 24ms
     id: ac_a_telecom_ct_sensor
@@ -331,7 +327,7 @@ sensor:
       - offset: -0.05                         # Approximate current measured in excess
 
   - platform: template
-    name: "Telecom MVHR AC Power"
+    name: "Telecom Sensors AC Power"
     lambda: |-
       if ( id(ac_a_telecom_ct_sensor).state < 0 ) {
         return 0;
@@ -350,7 +346,7 @@ sensor:
     id: ac_power_telecom
   
   - platform: total_daily_energy
-    name: "Telecom MVHR Energy Consumed"
+    name: "Telecom Sensors Energy Consumed"
     power_id: ac_power_telecom
     unit_of_measurement: kWh
     filters:
@@ -408,16 +404,16 @@ sensor:
       - multiply: 0.001
 
 
-# 5. POWER DAMP + OVEN (ADS1115 0x49, A0_GND)
+# 5. POWER DAMP (ADS1115 0x49, A0_GND)
 # 30 A / 1 V SCT-013 #1
 # Sockets in damp rooms, including automation server, RPi, switch, etc.
   - platform: ads1115
     multiplexer: 'A0_GND'
     gain: 2.048
-    name: "Damp Oven AC Current"
+    name: "Power Damp AC Current"
     ads1115_id: ads1115_bus_0x49
     update_interval: 24ms
-    id: ac_a_dampoven_ct_sensor
+    id: ac_a_powerdamp_ct_sensor
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
@@ -433,41 +429,41 @@ sensor:
       - offset: -0.05                         # Approximate current measured in excess
 
   - platform: template
-    name: "Damp Oven AC Power"
+    name: "Power Damp AC Power"
     lambda: |-
-      if ( id(ac_a_dampoven_ct_sensor).state < 0 ) {
+      if ( id(ac_a_powerdamp_ct_sensor).state < 0 ) {
         return 0;
       }
       if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 * id(ac_a_dampoven_ct_sensor).state) );
+        return ( abs(230.0 * id(ac_a_powerdamp_ct_sensor).state) );
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_dampoven_ct_sensor).state) );
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdamp_ct_sensor).state) );
       }
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
     device_class: power
     unit_of_measurement: "W"
-    id: ac_power_dampoven
+    id: ac_power_powerdamp
   
   - platform: total_daily_energy
-    name: "Damp Oven Energy Consumed"
-    power_id: ac_power_dampoven
+    name: "Power Damp Energy Consumed"
+    power_id: ac_power_powerdamp
     unit_of_measurement: kWh
     filters:
       - multiply: 0.001
 
 
-# 6. INDUCTION HOB + DISHWASHER (ADS1115 0x49, A1_GND)
+# 6. INDUCTION HOB (ADS1115 0x49, A1_GND)
 # 30 A / 1 V SCT-013 #2
   - platform: ads1115
     multiplexer: 'A1_GND'
     gain: 2.048
-    name: "Hob Dishwasher AC Current"
+    name: "Cooking Hob AC Current"
     ads1115_id: ads1115_bus_0x49
     update_interval: 24ms
-    id: ac_a_hobdishwasher_ct_sensor
+    id: ac_a_cookinghob_ct_sensor
     state_class: measurement
     device_class: current
     unit_of_measurement: "A"
@@ -483,27 +479,27 @@ sensor:
       - lambda: if (x < 0.80) return 0.0; else return x;  #### Offsetting "noise" in the circuit
 
   - platform: template
-    name: "Hob Dishwasher AC Power"
+    name: "Cooking Hob AC Power"
     lambda: |-
-      if ( id(ac_a_hobdishwasher_ct_sensor).state < 0 ) {
+      if ( id(ac_a_cookinghob_ct_sensor).state < 0 ) {
         return 0;
       }
       if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 *  id(ac_a_hobdishwasher_ct_sensor).state ) );
+        return ( abs(230.0 *  id(ac_a_cookinghob_ct_sensor).state ) );
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_hobdishwasher_ct_sensor).state ) );
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_cookinghob_ct_sensor).state ) );
       }
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
     device_class: power
     unit_of_measurement: "W"
-    id: ac_power_hobdishwasher
+    id: ac_power_cookinghob
   
   - platform: total_daily_energy
-    name: "Hob Dishwasher Energy Consumed"
-    power_id: ac_power_hobdishwasher
+    name: "Cooking Hob Energy Consumed"
+    power_id: ac_power_cookinghob
     unit_of_measurement: kWh
     filters:
       - multiply: 0.001
@@ -559,7 +555,7 @@ sensor:
       - multiply: 0.001
 
 
-# 8. Dishwasher (ADS1115 0x49, A2_GND)
+# 8. DISHWASHER (ADS1115 0x49, A2_GND)
 # 5 A / 1 V SCT-013 #3
   - platform: ads1115
     multiplexer: 'A3_GND'
