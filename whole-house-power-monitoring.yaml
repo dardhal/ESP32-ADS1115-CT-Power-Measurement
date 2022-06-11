@@ -199,7 +199,7 @@ sensor:
     accuracy_decimals: 1
     id: ha_ac_voltage
     filters:
-      - offset: 12.0
+      - lambda: if ( !(x > 150) ) return 230.0; else return x;
 
 
 #### Sensor definitions for each of the monitored circuits in separate files for readability
