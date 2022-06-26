@@ -58,6 +58,12 @@ globals:
   - id: west_lights_power
     type: float
     initial_value: '0.0'
+  - id: north_lights_power
+    type: float
+    initial_value: '0.0'
+  - id: south_lights_power
+    type: float
+    initial_value: '0.0'
   - id: mvhr_power_multiplier
     type: float
     initial_value: '1.0'
@@ -172,6 +178,30 @@ text_sensor:
           }
           else {
             id(west_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.sonoff_basic_02
+    id: north_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(north_lights_power) = 150.0;
+          }
+          else {
+            id(north_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.sonoff_mini_r2_01_relay
+    id: south_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(south_lights_power) = 150.0;
+          }
+          else {
+            id(south_lights_power) = 0.0;
           }
   - platform: homeassistant
     entity_id: switch.control_remoto_on_off_comfoair
@@ -625,11 +655,11 @@ sensor:
       - multiply: 0.001
 
 
-#### FAKE 02 : Outdoors consumption (hAP mini, entrance lights, and East / West lights)
+#### FAKE 02 : Outdoors consumption (hAP mini, entrance lights, and East / West / North / South lights)
   - platform: template
     name: "Outdoors Fake AC Power"
     lambda: |-
-      return ( id(basement_power) + id(entrance_lights_power) + id(east_lights_power) + id(west_lights_power) );
+      return ( id(basement_power) + id(entrance_lights_power) + id(east_lights_power) + id(west_lights_power) + + id(north_lights_power) + + id(south_lights_power) );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
