@@ -43,7 +43,7 @@
 # NOTE / TODO : tried using a 10 A CT for dishwasher but it seemed to be broken, so using a 5 A with different amplification, which may or may not give accurate results
 #####
 #
-# Last Modified : 2022-03-25
+# Last Modified : 2022-06-29
 #
 globals:
   - id: basement_power
@@ -62,6 +62,9 @@ globals:
     type: float
     initial_value: '0.0'
   - id: south_lights_power
+    type: float
+    initial_value: '0.0'
+  - id: pool_maintenance_power
     type: float
     initial_value: '0.0'
   - id: mvhr_power_multiplier
@@ -202,6 +205,18 @@ text_sensor:
           }
           else {
             id(south_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.0xbc33acfffe54d9b0
+    id: pool_maintenance_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(pool_maintenance_power) = 105.0;
+          }
+          else {
+            id(pool_maintenance_power) = 0.0;
           }
   - platform: homeassistant
     entity_id: switch.control_remoto_on_off_comfoair
@@ -659,7 +674,7 @@ sensor:
   - platform: template
     name: "Outdoors Fake AC Power"
     lambda: |-
-      return ( id(basement_power) + id(entrance_lights_power) + id(east_lights_power) + id(west_lights_power) + + id(north_lights_power) + + id(south_lights_power) );
+      return ( id(basement_power) + id(entrance_lights_power) + id(east_lights_power) + id(west_lights_power) + id(north_lights_power) + id(south_lights_power)  + id(pool_maintenance_power) );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
