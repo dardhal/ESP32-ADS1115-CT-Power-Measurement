@@ -43,7 +43,7 @@
 # NOTE / TODO : tried using a 10 A CT for dishwasher but it seemed to be broken, so using a 5 A with different amplification, which may or may not give accurate results
 #####
 #
-# Last Modified : 2022-06-29
+# Last Modified : 2022-11-10
 #
 globals:
   - id: basement_power
@@ -87,7 +87,7 @@ wifi:
     static_ip: 192.168.1.170
     gateway: 192.168.1.1
     subnet: 255.255.255.0
-    dns1: 192.168.1.100
+    dns1: 192.168.1.16
     dns2: 192.168.1.10
   ap:
     ssid: "HOME_POWER_MONITORING"
