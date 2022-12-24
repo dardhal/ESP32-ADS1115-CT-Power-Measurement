@@ -26,6 +26,7 @@
 # 7. Horno          : 10 A / 1 V SCT-013 #2
 #
 # 8. Lavavajillas  :   5 A / 1 V SCT-013 #3
+#    NOTE : as sensor is 5 A and current drawn when heating is ~10 A, reporting adjusted power when consumption indicate current measured may be capped
 #
 # x. Bajo Cubierta :  5 A / 1 V SCT-013 (PENDING)
 # x. Bajo Vivienda : 10 A / 1 V SCT-013 (PENDING)
@@ -628,6 +629,14 @@ sensor:
     lambda: |-
       if ( id(ac_a_dishwasher_ct_sensor).state < 0 ) {
         return 0;
+      }
+      if ( id(ac_a_dishwasher_ct_sensor).state > 5 ) {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( abs(230.0 * ( 1.5 * id(ac_a_dishwasher_ct_sensor).state ) ) );
+        }
+        else {
+          return ( abs(id(ha_ac_voltage).state * ( 1.5 * id(ac_a_dishwasher_ct_sensor).state ) ) );
+        }
       }
       if ( id(ha_ac_voltage).state < 180 ) {
         return ( abs(230.0 *  id(ac_a_dishwasher_ct_sensor).state ) );
