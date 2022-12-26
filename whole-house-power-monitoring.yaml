@@ -27,6 +27,7 @@
 #
 # 8. Lavavajillas  :   5 A / 1 V SCT-013 #3
 #    NOTE : as sensor is 5 A and current drawn when heating is ~10 A, reporting adjusted power when consumption indicate current measured may be capped
+#    NOTE : it induces significant current (hence power measurements) onto Hob (>200 W), Damp Sockets (+75 W) and Oven (+60 W) when heating
 #
 # x. Bajo Cubierta :  5 A / 1 V SCT-013 (PENDING)
 # x. Bajo Vivienda : 10 A / 1 V SCT-013 (PENDING)
@@ -34,14 +35,6 @@
 #### Considering the ESP32 lack of linearity at low values would not be a problem for some circuits (oven / dishwasher), could be used to have more measured circuits
 #### ADCs in the ESP32 also may or may not be adequate to measure an input from a ZMPT101B AC transformer and have a reliable AC voltage source running off ESPhome
 #
-# TODO : once oven (7) and dishwasher (8) are added in separately, modify existing measurements for correct and meaningful names, even at the expense of throwing away previous measurements
-#
-# NOTE : Horno (7) induces a significant amount on other circuits, namely :
-#   Fuerza Húmedos (5), at around 80 W : no adjustment necessary (can be made later based upon status of Horno (7) to substract some Watts
-#   Inducción (6), enough to get past the 0.75 A threshold below which we report zero : just raising the threshold a bit more
-#
-# NOTE : Horno (7) also induces current linearly onto dishwasher (8) and hence consumption for the latter must be compensated for (up to 30 W approximately)
-# NOTE / TODO : tried using a 10 A CT for dishwasher but it seemed to be broken, so using a 5 A with different amplification, which may or may not give accurate results
 #####
 #
 # Last Modified : 2022-11-10
@@ -480,11 +473,21 @@ sensor:
       if ( id(ac_a_powerdamp_ct_sensor).state < 0 ) {
         return 0;
       }
-      if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 * id(ac_a_powerdamp_ct_sensor).state) );
+      if ( id(ac_a_dishwasher_ct_sensor).state > 5 ) {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( max ( abs(230.0 * id(ac_a_powerdamp_ct_sensor).state) - 75, 0.0 ) );
+        }
+        else {
+          return ( max ( abs(id(ha_ac_voltage).state * id(ac_a_powerdamp_ct_sensor).state) - 75, float(0.0) ) );
+        }
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdamp_ct_sensor).state) );
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( abs(230.0 * id(ac_a_powerdamp_ct_sensor).state) );
+        }
+        else {
+          return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdamp_ct_sensor).state) );
+        }
       }
     accuracy_decimals: 1
     update_interval: 30s
@@ -530,11 +533,21 @@ sensor:
       if ( id(ac_a_cookinghob_ct_sensor).state < 0 ) {
         return 0;
       }
-      if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 *  id(ac_a_cookinghob_ct_sensor).state ) );
+      if ( id(ac_a_dishwasher_ct_sensor).state > 5 ) {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( max ( abs(230.0 * id(ac_a_cookinghob_ct_sensor).state ) - 200, 0.0 ) );
+        }
+        else {
+          return ( max ( abs(id(ha_ac_voltage).state * id(ac_a_cookinghob_ct_sensor).state ) - 200, float(0.0) ) );
+        }
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_cookinghob_ct_sensor).state ) );
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( abs(230.0 * id(ac_a_cookinghob_ct_sensor).state ) );
+        }
+        else {
+          return ( abs(id(ha_ac_voltage).state * id(ac_a_cookinghob_ct_sensor).state ) );
+        }
       }
     accuracy_decimals: 1
     update_interval: 30s
@@ -580,11 +593,21 @@ sensor:
       if ( id(ac_a_oven_ct_sensor).state < 0 ) {
         return 0;
       }
-      if ( id(ha_ac_voltage).state < 180 ) {
-        return ( abs(230.0 *  id(ac_a_oven_ct_sensor).state ) );
+      if ( id(ac_a_dishwasher_ct_sensor).state > 5 ) {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( max ( abs(230.0 *  id(ac_a_oven_ct_sensor).state ) - 60, 0.0 ) );
+        }
+        else {
+          return ( max ( abs(id(ha_ac_voltage).state * id(ac_a_oven_ct_sensor).state ) - 60, float(0.0) ) );
+        }
       }
       else {
-        return ( abs(id(ha_ac_voltage).state * id(ac_a_oven_ct_sensor).state ) );
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( abs(230.0 *  id(ac_a_oven_ct_sensor).state ) );
+        }
+        else {
+          return ( abs(id(ha_ac_voltage).state * id(ac_a_oven_ct_sensor).state ) );
+        }
       }
     accuracy_decimals: 1
     update_interval: 30s
