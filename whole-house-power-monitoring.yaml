@@ -37,7 +37,7 @@
 #
 #####
 #
-# Last Modified : 2022-11-10
+# Last Modified : 2023-02-05
 #
 globals:
   - id: basement_power
@@ -98,7 +98,8 @@ logger:
   level: WARN
 
 api:
-  password: !secret esphome_api_password
+  encryption:
+    key: !secret esphome_api_key
 
 ota:
   safe_mode: True
