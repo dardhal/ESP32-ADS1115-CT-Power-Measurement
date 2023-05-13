@@ -1,0 +1,737 @@
+# Hostname : esp32-02
+# Friendly Name : power-monitoring
+# Summary : Multi channel AC power monitoring for home electrical circuits
+# Description : By using SCT-013 CT clamps with 1 V AC output and external ADS1115 ADC, 
+#               measure per-circuit AC current for instantaneous and cumulative energy utilization
+# Software Used : Latest ESPHome code with two 4-channel ADS1115 ADC 16-bit boards attached to separate I2C buses
+#   https://esphome.io/devices/esp32.html
+#   https://esphome.io/components/i2c.html
+#   https://esphome.io/components/sensor/adc.html
+#   https://esphome.io/components/sensor/ct_clamp.html
+#
+# This is the list of electrical circuits being monitored (current and voltage are AC). To maximize coverage, and due to the 
+# limitation of to channels, I had to combine several electrical circuits into a single CT clamp
+# 1. Fridge         :  5 A / 1 V SCT-013 #1
+# 
+# 2. Lighting       : 15 A / 1 V SCT-013 #1
+#    Washing Machine:
+# 
+# 3. Telecom.+Sensor: 5 A / 1 V SCT-013 #2
+# 
+# 4. Power Outlets  : 10 A / 1 V SCT-013 #1
+# 
+# 5. Damp Power Outl: 30 A / 1 V SCT-013 #1
+# 
+# 6. Induction Hob  : 30 A / 1 V SCT-013 #2
+# 
+# 7. Oven           : 10 A / 1 V SCT-013 #2
+#
+# 8. Dishwasher    :   5 A / 1 V SCT-013 #3
+# 
+# NOTE 1 : dishwasher consumes way more than 5 A when heating water. Turns out the ESPHome shown below does a good job at calculating the real power consumption
+# NOTE 2 : probably due to CT lead cable wiring, some CT clamps seem to be inducing parasite currents on others, for example, when dishwasher in heating water, it produces bogus measurements for Hob (~200 W), Damp Sockets (+75 W) and Oven (+60 W), compensated for in the code
+# NOTE 3 : according to local electrical code, power outlets have to be served from different circuits depending on being in "damp rooms" (bathrooms and kitchen) or others
+# NOTE 4 : ESP32 ADC has very poor linearity at low voltage values. Hence they may have been used for circuits with OFF / ON high resistive loads (such as electrical heaters) to add more circuits, but would be inadequate for those with a mix of low and high currents
+#
+#####
+#
+# Last Modified : 2023-05-13
+#
+
+#### There are here to produce power measurements for loads with no CT clamps, but being of a fixed nature (light bulbs) and being controlled through WiFi relays, we can know when they are ON or OFF
+globals:
+  - id: basement_power
+    type: float
+    initial_value: '5.0'
+  - id: entrance_lights_power
+    type: float
+    initial_value: '0.0'
+  - id: east_lights_power
+    type: float
+    initial_value: '0.0'
+  - id: west_lights_power
+    type: float
+    initial_value: '0.0'
+  - id: north_lights_power
+    type: float
+    initial_value: '0.0'
+  - id: south_lights_power
+    type: float
+    initial_value: '0.0'
+  - id: pool_maintenance_power
+    type: float
+    initial_value: '0.0'
+  - id: mvhr_power_multiplier
+    type: float
+    initial_value: '1.0'
+
+esphome:
+  name: power-monitoring
+  comment: "Home Power Monitoring"
+  platform: ESP32
+  board: nodemcu-32s
+
+wifi:
+  ssid: !secret home_ssid
+  password: !secret home_ssid_password
+  power_save_mode: none
+  fast_connect: on
+  use_address: 192.168.1.170
+  manual_ip:
+    static_ip: 192.168.1.170
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+    dns1: 192.168.1.16
+    dns2: 192.168.1.10
+  ap:
+    ssid: "HOME_POWER_MONITORING"
+    password: !secret esp_ap_password
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    timezone: "Europe/Madrid"
+
+captive_portal:
+
+logger:
+  level: WARN
+
+api:
+  encryption:
+    key: !secret esphome_api_key
+
+ota:
+  safe_mode: True
+  password: !secret esphome_ota_password
+
+#web_server:
+#  port: 8888
+#  auth:
+#    username: !secret esphome_web_server_username
+#    password: !secret esphome_web_server_password
+
+
+#### The ADS1115 4-channel ADC use I2C for communication, will use each one at a different address (0x48 and 0x49) on a single I2C bus
+#### NOTE : despite ESPHome documentation asks for enabling continuous_mode, I got much better results not doing so
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true
+  frequency: 800kHz
+  id: i2c_bus
+
+ads1115:
+  - address: 0x48
+    continuous_mode: off
+    id: ads1115_bus_0x48
+
+  - address: 0x49
+    continuous_mode: off
+    id: ads1115_bus_0x49
+
+switch:
+  - platform: restart
+    name: "Home Power Monitoring Restart"
+
+binary_sensor:
+  - platform: status
+    name: "Home Power Monitoring Status"
+
+
+#### Reporting power consumption for devices with no CT clamp because consumption is fixed and we know when they are on from Home Assistant sensors
+#### For example, when entrance lights are on, that's 12 W. When East facade light is on, that's 30 W, or when pool pump is active, we know it is 105 W
+text_sensor:
+  - platform: homeassistant
+    entity_id: switch.sonoff_basic_01
+    id: entrance_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(entrance_lights_power) = 12.0;
+          }
+          else {
+            id(entrance_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.attic_relay_east_3
+    id: east_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(east_lights_power) = 30.0;
+          }
+          else {
+            id(east_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.attic_relay_west_3
+    id: west_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(west_lights_power) = 20.0;
+          }
+          else {
+            id(west_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.sonoff_basic_02
+    id: north_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(north_lights_power) = 150.0;
+          }
+          else {
+            id(north_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.sonoff_mini_r2_01_relay
+    id: south_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(south_lights_power) = 150.0;
+          }
+          else {
+            id(south_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.0xbc33acfffe54d9b0
+    id: pool_maintenance_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(pool_maintenance_power) = 105.0;
+          }
+          else {
+            id(pool_maintenance_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.control_remoto_on_off_comfoair
+    id: mvhr_switch_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(mvhr_power_multiplier) = 1.0;
+          }
+          else {
+            id(mvhr_power_multiplier) = 0.0;
+          }
+
+#### We pull a rather reliable AC voltage measurement from Home Assistant entity (which corresponds to a SONOFF DUAL R3) to calculate (active) power as product of measured current times voltage
+sensor:
+  - platform: wifi_signal
+    name: "Home Power Monitoring WiFi Level"
+    update_interval: 60s
+
+  - platform: homeassistant
+    name: "Measured AC Voltage"
+    entity_id: sensor.ac_voltage
+    unit_of_measurement: "V"
+    device_class: voltage
+    accuracy_decimals: 1
+    id: ha_ac_voltage
+    filters:
+      - lambda: if ( !(x > 150) ) return 230.0; else return x;
+
+
+
+#### Sensor definitions for each of the monitored circuits. Was unable to split each section into a separate file for readability
+#### Note the way to calculate current from CT voltage measurements reported by the ADC is not as recommended in ESPHome docs, but after much testing, this is how it worked best for me
+#### A few remarks for all the 8 independent circuits measured through CT clamps and ADS1115 ADC :
+#### - ESPHome ADS1115 platform returns calculated  amps every 24 ms as configured
+#### - "filters" does the poor-mans RMS calculation for AC current
+#### - For some circuits, we try to avoid induced current by using a "lambda" to either return zero amps or an smaller value in some circumstances (based on lots of testing)
+#### - In the event the AC voltage reported from HA is clearly bogus, we use a fixed value of 230 V
+#### - We calculate daily energy consumed here, although it could have been done (and probably more correct) on the HA side using the "integration" platform
+
+# 1. FRIDGE (ADS1115 0x48 , A0_GND)
+# 5 A / 1 V SCT-013 #1
+  - platform: ads1115
+    multiplexer: 'A0_GND'
+    gain: 2.048
+    name: "Fridge AC Current"
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms
+    id: ac_a_fridge_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply:  5.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
+      - lambda: if (x < 0.03) return 0.0; else return x;
+
+  - platform: template
+    name: "Fridge AC Power"
+    lambda: |-
+      if ( id(ac_a_fridge_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_fridge_ct_sensor).state) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_fridge_ct_sensor).state) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_fridge
+  
+  - platform: total_daily_energy
+    name: "Fridge Energy Consumed"
+    power_id: ac_power_fridge
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+  
+
+# 2. LIGHTING + WASHING MACHINE (ADS1115 0x48, A1_GND)
+# 15 A / 1 V SCT-013 #1
+  - platform: ads1115
+    multiplexer: 'A1_GND'
+    gain: 2.048
+    name: "Lighting Washing AC Current"
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms
+    id: ac_a_lighting_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply:  15.0                       # Mapping measured voltage from CT clamp to current in the primary circuit (for 15 A / 1 V CT clamp)
+
+  - platform: template
+    name: "Lighting Washing AC Power"
+    lambda: |-
+      if ( id(ac_a_lighting_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_lighting_ct_sensor).state) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_lighting_ct_sensor).state) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_lighting
+  
+  - platform: total_daily_energy
+    name: "Lighting Washing Energy Consumed"
+    power_id: ac_power_lighting
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+# 3. TELECOM/SENSORS (ADS1115 0x48, A2_GND)
+# 5 A / 1 V SCT-013 #2
+# Includes devices under TELECOM : living room TV and deco, DIY temp/RH sensors, Alexa, 12 VDC TV feed and zigbee router
+  - platform: ads1115
+    multiplexer: 'A2_GND'
+    gain: 2.048
+    name: "Telecom Sensors AC Current"
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms
+    id: ac_a_telecom_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 5.0                         # Mapping measured voltage from CT clamp to current in the primary circuit (for  5 A / 1 V CT clamp)
+      - offset: -0.05                         # Approximate current measured in excess
+
+  - platform: template
+    name: "Telecom Sensors AC Power"
+    lambda: |-
+      if ( id(ac_a_telecom_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_telecom_ct_sensor).state) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_telecom_ct_sensor).state) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_telecom
+  
+  - platform: total_daily_energy
+    name: "Telecom Sensors Energy Consumed"
+    power_id: ac_power_telecom
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+# 4. POWER DRY (ADS1115 0x48, A3_GND)
+# 10 A / 1 V SCT-013 #1
+# Sockets in dry rooms, including home office and extractor hood
+  - platform: ads1115
+    multiplexer: 'A3_GND'
+    gain: 2.048
+    name: "Power Dry AC Current"
+    ads1115_id: ads1115_bus_0x48
+    update_interval: 24ms
+    id: ac_a_powerdry_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
+      - offset: -0.1                          # Approximate current measured in excess
+
+  - platform: template
+    name: "Power Dry AC Power"
+    lambda: |-
+      if ( id(ac_a_powerdry_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 * id(ac_a_powerdry_ct_sensor).state ) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdry_ct_sensor).state ) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_powerdry
+  
+  - platform: total_daily_energy
+    name: "Power Dry Energy Consumed"
+    power_id: ac_power_powerdry
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+# 5. POWER DAMP (ADS1115 0x49, A0_GND)
+# 30 A / 1 V SCT-013 #1
+# Sockets in damp rooms, including automation server, RPi, switch, etc.
+  - platform: ads1115
+    multiplexer: 'A0_GND'
+    gain: 2.048
+    name: "Power Damp AC Current"
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_powerdamp_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
+      - offset: -0.05                         # Approximate current measured in excess
+
+  - platform: template
+    name: "Power Damp AC Power"
+    lambda: |-
+      if ( id(ac_a_powerdamp_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ac_a_dishwasher_ct_sensor).state > 5 ) {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( max ( abs(230.0 * id(ac_a_powerdamp_ct_sensor).state) - 75, 0.0 ) );
+        }
+        else {
+          return ( max ( abs(id(ha_ac_voltage).state * id(ac_a_powerdamp_ct_sensor).state) - 75, float(0.0) ) );
+        }
+      }
+      else {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( abs(230.0 * id(ac_a_powerdamp_ct_sensor).state) );
+        }
+        else {
+          return ( abs(id(ha_ac_voltage).state * id(ac_a_powerdamp_ct_sensor).state) );
+        }
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_powerdamp
+  
+  - platform: total_daily_energy
+    name: "Power Damp Energy Consumed"
+    power_id: ac_power_powerdamp
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+# 6. INDUCTION HOB (ADS1115 0x49, A1_GND)
+# 30 A / 1 V SCT-013 #2
+  - platform: ads1115
+    multiplexer: 'A1_GND'
+    gain: 2.048
+    name: "Cooking Hob AC Current"
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_cookinghob_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 30.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 30 A / 1 V CT clamp)
+      - lambda: if (x < 0.80) return 0.0; else return x;  #### Offsetting "noise" in the circuit
+
+  - platform: template
+    name: "Cooking Hob AC Power"
+    lambda: |-
+      if ( id(ac_a_cookinghob_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ac_a_dishwasher_ct_sensor).state > 5 ) {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( max ( abs(230.0 * id(ac_a_cookinghob_ct_sensor).state ) - 200, 0.0 ) );
+        }
+        else {
+          return ( max ( abs(id(ha_ac_voltage).state * id(ac_a_cookinghob_ct_sensor).state ) - 200, float(0.0) ) );
+        }
+      }
+      else {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( abs(230.0 * id(ac_a_cookinghob_ct_sensor).state ) );
+        }
+        else {
+          return ( abs(id(ha_ac_voltage).state * id(ac_a_cookinghob_ct_sensor).state ) );
+        }
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_cookinghob
+  
+  - platform: total_daily_energy
+    name: "Cooking Hob Energy Consumed"
+    power_id: ac_power_cookinghob
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+# 7. OVEN (ADS1115 0x49, A2_GND)
+# 10 A / 1 V SCT-013 #2
+  - platform: ads1115
+    multiplexer: 'A2_GND'
+    gain: 2.048
+    name: "Oven AC Current"
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_oven_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 10.0                        # Mapping measured voltage from CT clamp to current in the primary circuit (for 10 A / 1 V CT clamp)
+      - lambda: if (x < 0.05) return 0.0; else return x;
+
+  - platform: template
+    name: "Oven AC Power"
+    lambda: |-
+      if ( id(ac_a_oven_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ac_a_dishwasher_ct_sensor).state > 5 ) {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( max ( abs(230.0 *  id(ac_a_oven_ct_sensor).state ) - 60, 0.0 ) );
+        }
+        else {
+          return ( max ( abs(id(ha_ac_voltage).state * id(ac_a_oven_ct_sensor).state ) - 60, float(0.0) ) );
+        }
+      }
+      else {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( abs(230.0 *  id(ac_a_oven_ct_sensor).state ) );
+        }
+        else {
+          return ( abs(id(ha_ac_voltage).state * id(ac_a_oven_ct_sensor).state ) );
+        }
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_oven
+  
+  - platform: total_daily_energy
+    name: "Oven Energy Consumed"
+    power_id: ac_power_oven
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+# 8. DISHWASHER (ADS1115 0x49, A2_GND)
+# 5 A / 1 V SCT-013 #3
+  - platform: ads1115
+    multiplexer: 'A3_GND'
+    gain: 4.096
+    name: "Dishwasher AC Current"
+    ads1115_id: ads1115_bus_0x49
+    update_interval: 24ms
+    id: ac_a_dishwasher_ct_sensor
+    state_class: measurement
+    device_class: current
+    unit_of_measurement: "A"
+    icon: "mdi:flash"
+    accuracy_decimals: 8
+    filters:
+      - lambda: return x * x;                 ####
+      - sliding_window_moving_average:        #
+          window_size: 1250                   # This blocks calculates the RMS voltage sampled by the ADS1115 ADC (averages over 30 s and reports every 15 s)
+          send_every:  625                    #
+      - lambda: return sqrt(x);               ####
+      - multiply: 5.0                         # Mapping measured voltage from CT clamp to current in the primary circuit (for 5 A / 1 V CT clamp)
+      - lambda: if (x < 0.15) return 0.0; else return x;
+
+  - platform: template
+    name: "Dishwasher AC Power"
+    lambda: |-
+      if ( id(ac_a_dishwasher_ct_sensor).state < 0 ) {
+        return 0;
+      }
+      if ( id(ac_a_dishwasher_ct_sensor).state > 5 ) {
+        if ( id(ha_ac_voltage).state < 180 ) {
+          return ( abs(230.0 * ( 1.5 * id(ac_a_dishwasher_ct_sensor).state ) ) );
+        }
+        else {
+          return ( abs(id(ha_ac_voltage).state * ( 1.5 * id(ac_a_dishwasher_ct_sensor).state ) ) );
+        }
+      }
+      if ( id(ha_ac_voltage).state < 180 ) {
+        return ( abs(230.0 *  id(ac_a_dishwasher_ct_sensor).state ) );
+      }
+      else {
+        return ( abs(id(ha_ac_voltage).state * id(ac_a_dishwasher_ct_sensor).state ) );
+      }
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_dishwasher
+  
+  - platform: total_daily_energy
+    name: "Dishwasher Energy Consumed"
+    power_id: ac_power_dishwasher
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+#### Fake (rather, estimated) power consumption is reported from ESPHome for other electrical consumers. It could have been done from HA, but thought it could be good to have them all here
+#
+#### FAKE 01 : MVHR (Mechanical Ventilation with Heat Recovery)
+  - platform: template
+    name: "MVHR Fake AC Power"
+    lambda: |-
+      return ( id(mvhr_power_multiplier) * 16.0 );
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_mvhr_fake
+  
+  - platform: total_daily_energy
+    name: "MVHR Fake Energy Consumed"
+    power_id: ac_power_mvhr_fake
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+
+#### FAKE 02 : Outdoors consumption (basement, facade lights, pool pump)
+  - platform: template
+    name: "Outdoors Fake AC Power"
+    lambda: |-
+      return ( id(basement_power) + id(entrance_lights_power) + id(east_lights_power) + id(west_lights_power) + id(north_lights_power) + id(south_lights_power)  + id(pool_maintenance_power) );
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_outdoors_fake
+  
+  - platform: total_daily_energy
+    name: "Outdoors Fake Energy Consumed"
+    power_id: ac_power_outdoors_fake
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
