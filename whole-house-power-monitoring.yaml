@@ -9,36 +9,36 @@
 #   https://esphome.io/components/sensor/adc.html
 #   https://esphome.io/components/sensor/ct_clamp.html
 #
-# This is the list of electrical circuits to be monitored (current and voltage are AC)
-# 1. Frigorífico    :  5 A / 1 V SCT-013 #1
+# This is the list of electrical circuits being monitored (current and voltage are AC). To maximize coverage, and due to the 
+# limitation of to channels, I had to combine several electrical circuits into a single CT clamp
+# 1. Fridge         :  5 A / 1 V SCT-013 #1
 # 
-# 2. Iluminación    : 15 A / 1 V SCT-013 #1
-#    Lavadora       :
+# 2. Lighting       : 15 A / 1 V SCT-013 #1
+#    Washing Machine:
 # 
 # 3. Telecom.+Sensor: 5 A / 1 V SCT-013 #2
 # 
-# 4. Fuerza Seco    : 10 A / 1 V SCT-013 #1
+# 4. Power Outlets  : 10 A / 1 V SCT-013 #1
 # 
-# 5. Fuerza Húmedos : 30 A / 1 V SCT-013 #1 (incl. Domótica)
+# 5. Damp Power Outl: 30 A / 1 V SCT-013 #1
 # 
-# 6. Inducción      : 30 A / 1 V SCT-013 #2
+# 6. Induction Hob  : 30 A / 1 V SCT-013 #2
 # 
-# 7. Horno          : 10 A / 1 V SCT-013 #2
+# 7. Oven           : 10 A / 1 V SCT-013 #2
 #
-# 8. Lavavajillas  :   5 A / 1 V SCT-013 #3
-#    NOTE : as sensor is 5 A and current drawn when heating is ~10 A, reporting adjusted power when consumption indicate current measured may be capped
-#    NOTE : it induces significant current (hence power measurements) onto Hob (>200 W), Damp Sockets (+75 W) and Oven (+60 W) when heating
-#
-# x. Bajo Cubierta :  5 A / 1 V SCT-013 (PENDING)
-# x. Bajo Vivienda : 10 A / 1 V SCT-013 (PENDING)
-#
-#### Considering the ESP32 lack of linearity at low values would not be a problem for some circuits (oven / dishwasher), could be used to have more measured circuits
-#### ADCs in the ESP32 also may or may not be adequate to measure an input from a ZMPT101B AC transformer and have a reliable AC voltage source running off ESPhome
+# 8. Dishwasher    :   5 A / 1 V SCT-013 #3
+# 
+# NOTE 1 : dishwasher consumes way more than 5 A when heating water. Turns out the ESPHome shown below does a good job at calculating the real power consumption
+# NOTE 2 : probably due to CT lead cable wiring, some CT clamps seem to be inducing parasite currents on others, for example, when dishwasher in heating water, it produces bogus measurements for Hob (~200 W), Damp Sockets (+75 W) and Oven (+60 W), compensated for in the code
+# NOTE 3 : according to local electrical code, power outlets have to be served from different circuits depending on being in "damp rooms" (bathrooms and kitchen) or others
+# NOTE 4 : ESP32 ADC has very poor linearity at low voltage values. Hence they may have been used for circuits with OFF / ON high resistive loads (such as electrical heaters) to add more circuits, but would be inadequate for those with a mix of low and high currents
 #
 #####
 #
-# Last Modified : 2023-02-05
+# Last Modified : 2023-05-13
 #
+
+#### There are here to produce power measurements for loads with no CT clamps, but being of a fixed nature (light bulbs) and being controlled through WiFi relays, we can know when they are ON or OFF
 globals:
   - id: basement_power
     type: float
@@ -112,8 +112,8 @@ ota:
 #    password: !secret esphome_web_server_password
 
 
-# Create single I2C bus where both ADS1115 at addresses 0x48 and 0x49 will be used and
-# instantiate the two ADC boards (hubs) at their corresponding addresses
+#### The ADS1115 4-channel ADC use I2C for communication, will use each one at a different address (0x48 and 0x49) on a single I2C bus
+#### NOTE : despite ESPHome documentation asks for enabling continuous_mode, I got much better results not doing so
 i2c:
   sda: GPIO21
   scl: GPIO22
@@ -139,7 +139,8 @@ binary_sensor:
     name: "Home Power Monitoring Status"
 
 
-# Power consumption for devices with no measurement hardware in place, from HA status entities
+#### Reporting power consumption for devices with no CT clamp because consumption is fixed and we know when they are on from Home Assistant sensors
+#### For example, when entrance lights are on, that's 12 W. When East facade light is on, that's 30 W, or when pool pump is active, we know it is 105 W
 text_sensor:
   - platform: homeassistant
     entity_id: switch.sonoff_basic_01
@@ -226,6 +227,7 @@ text_sensor:
             id(mvhr_power_multiplier) = 0.0;
           }
 
+#### We pull a rather reliable AC voltage measurement from Home Assistant entity (which corresponds to a SONOFF DUAL R3) to calculate (active) power as product of measured current times voltage
 sensor:
   - platform: wifi_signal
     name: "Home Power Monitoring WiFi Level"
@@ -242,7 +244,16 @@ sensor:
       - lambda: if ( !(x > 150) ) return 230.0; else return x;
 
 
-#### Sensor definitions for each of the monitored circuits in separate files for readability
+
+#### Sensor definitions for each of the monitored circuits. Was unable to split each section into a separate file for readability
+#### Note the way to calculate current from CT voltage measurements reported by the ADC is not as recommended in ESPHome docs, but after much testing, this is how it worked best for me
+#### A few remarks for all the 8 independent circuits measured through CT clamps and ADS1115 ADC :
+#### - ESPHome ADS1115 platform returns calculated  amps every 24 ms as configured
+#### - "filters" does the poor-mans RMS calculation for AC current
+#### - For some circuits, we try to avoid induced current by using a "lambda" to either return zero amps or an smaller value in some circumstances (based on lots of testing)
+#### - In the event the AC voltage reported from HA is clearly bogus, we use a fixed value of 230 V
+#### - We calculate daily energy consumed here, although it could have been done (and probably more correct) on the HA side using the "integration" platform
+
 # 1. FRIDGE (ADS1115 0x48 , A0_GND)
 # 5 A / 1 V SCT-013 #1
   - platform: ads1115
@@ -683,7 +694,9 @@ sensor:
       - multiply: 0.001
 
 
-#### FAKE 01 : MVHR (until a time this is being measured using a CT clamp)
+#### Fake (rather, estimated) power consumption is reported from ESPHome for other electrical consumers. It could have been done from HA, but thought it could be good to have them all here
+#
+#### FAKE 01 : MVHR (Mechanical Ventilation with Heat Recovery)
   - platform: template
     name: "MVHR Fake AC Power"
     lambda: |-
@@ -703,7 +716,7 @@ sensor:
       - multiply: 0.001
 
 
-#### FAKE 02 : Outdoors consumption (hAP mini, entrance lights, and East / West / North / South lights)
+#### FAKE 02 : Outdoors consumption (basement, facade lights, pool pump)
   - platform: template
     name: "Outdoors Fake AC Power"
     lambda: |-
