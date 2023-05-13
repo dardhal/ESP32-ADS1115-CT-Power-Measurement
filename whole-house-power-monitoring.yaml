@@ -35,7 +35,7 @@
 #
 #####
 #
-# Last Modified : 2023-05-13
+# Last Modified : 2023-05-14
 #
 
 #### There are here to produce power measurements for loads with no CT clamps, but being of a fixed nature (light bulbs) and being controlled through WiFi relays, we can know when they are ON or OFF
@@ -76,13 +76,13 @@ wifi:
   password: !secret home_ssid_password
   power_save_mode: none
   fast_connect: on
-  use_address: 192.168.1.170
+  use_address: !secret ip_address
   manual_ip:
-    static_ip: 192.168.1.170
-    gateway: 192.168.1.1
-    subnet: 255.255.255.0
-    dns1: 192.168.1.16
-    dns2: 192.168.1.10
+    static_ip: !secret ip_address
+    gateway: !secret gateway
+    subnet: !secret subnet
+    dns1: !secret dns1
+    dns2: !secret dns2
   ap:
     ssid: "HOME_POWER_MONITORING"
     password: !secret esp_ap_password
