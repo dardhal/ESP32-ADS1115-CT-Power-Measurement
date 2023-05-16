@@ -40,9 +40,15 @@
 
 #### There are here to produce power measurements for loads with no CT clamps, but being of a fixed nature (light bulbs) and being controlled through WiFi relays, we can know when they are ON or OFF
 globals:
-  - id: basement_power
+  - id: basement_ap_power
     type: float
     initial_value: '5.0'
+  - id: basement_lights_power
+    type: float
+    initial_value: '0.0'
+  - id: pool_maintenance_power
+    type: float
+    initial_value: '0.0'
   - id: entrance_lights_power
     type: float
     initial_value: '0.0'
@@ -56,9 +62,6 @@ globals:
     type: float
     initial_value: '0.0'
   - id: south_lights_power
-    type: float
-    initial_value: '0.0'
-  - id: pool_maintenance_power
     type: float
     initial_value: '0.0'
   - id: mvhr_power_multiplier
@@ -203,18 +206,6 @@ text_sensor:
             id(south_lights_power) = 0.0;
           }
   - platform: homeassistant
-    entity_id: switch.0xbc33acfffe54d9b0
-    id: pool_maintenance_status
-    on_value:
-      then:
-        lambda: |-
-          if (x == "on") {
-            id(pool_maintenance_power) = 105.0;
-          }
-          else {
-            id(pool_maintenance_power) = 0.0;
-          }
-  - platform: homeassistant
     entity_id: switch.control_remoto_on_off_comfoair
     id: mvhr_switch_status
     on_value:
@@ -225,6 +216,42 @@ text_sensor:
           }
           else {
             id(mvhr_power_multiplier) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.4ch_pro_r2_01_relay_1
+    id: basement_ap_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(basement_ap_power) = 5.0;
+          }
+          else {
+            id(basement_ap_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.4ch_pro_r2_01_relay_3
+    id: basement_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(basement_lights_power) = 30.0;
+          }
+          else {
+            id(basement_lights_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.4ch_pro_r2_01_relay_4
+    id: pool_maintenance_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(pool_maintenance_power) = 105.0;
+          }
+          else {
+            id(pool_maintenance_power) = 0.0;
           }
 
 #### We pull a rather reliable AC voltage measurement from Home Assistant entity (which corresponds to a SONOFF DUAL R3) to calculate (active) power as product of measured current times voltage
@@ -243,6 +270,13 @@ sensor:
     filters:
       - lambda: if ( !(x > 150) ) return 230.0; else return x;
 
+  - platform: homeassistant
+    name: "MVHR Power Consumption"
+    entity_id: sensor.mvhr_power_consumption
+    unit_of_measurement: "W"
+    device_class: power
+    accuracy_decimals: 1
+    id: ha_mvhr_power
 
 
 #### Sensor definitions for each of the monitored circuits. Was unable to split each section into a separate file for readability
@@ -694,33 +728,90 @@ sensor:
       - multiply: 0.001
 
 
-#### Fake (rather, estimated) power consumption is reported from ESPHome for other electrical consumers. It could have been done from HA, but thought it could be good to have them all here
+#### Power and energy measurements for other loads, calculated by metering power when corresponding relays are on
 #
-#### FAKE 01 : MVHR (Mechanical Ventilation with Heat Recovery)
+#### Basement AP power and energy consumed
   - platform: template
-    name: "MVHR Fake AC Power"
+    name: "Basement WiFi AP Power"
     lambda: |-
-      return ( id(mvhr_power_multiplier) * 16.0 );
+      return ( id(basement_ap_power) );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
     device_class: power
     unit_of_measurement: "W"
-    id: ac_power_mvhr_fake
+    id: ac_power_basement_ap
   
   - platform: total_daily_energy
-    name: "MVHR Fake Energy Consumed"
-    power_id: ac_power_mvhr_fake
+    name: "Basement AP Energy Consumed"
+    power_id: ac_power_basement_ap
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+#### Basement lighting power and energy consumed
+  - platform: template
+    name: "Basement Lights Power"
+    lambda: |-
+      return ( id(basement_lights_power) );
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_basement_lights
+  
+  - platform: total_daily_energy
+    name: "Basement Lights Energy Consumed"
+    power_id: ac_power_basement_lights
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+#### Pool maintenance power and energy consumed
+  - platform: template
+    name: "Pool Maintenance Power"
+    lambda: |-
+      return ( id(pool_maintenance_power) );
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_pool_maintenance
+  
+  - platform: total_daily_energy
+    name: "Pool Maintenance Energy Consumed"
+    power_id: ac_power_pool_maintenance
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
+#### MVHR (Mechanical Ventilation with Heat Recovery) power and energy consumed
+  - platform: template
+    name: "MVHR AC Power"
+    lambda: |-
+      return ( id(mvhr_power_multiplier) * id(ha_mvhr_power).state );
+    accuracy_decimals: 0
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_mvhr
+  
+  - platform: total_daily_energy
+    name: "MVHR Energy Consumed"
+    power_id: ac_power_mvhr
     unit_of_measurement: kWh
     filters:
       - multiply: 0.001
 
 
-#### FAKE 02 : Outdoors consumption (basement, facade lights, pool pump)
+#### Total outdoors consumption (basement, facade lights, pool pump)
   - platform: template
     name: "Outdoors Fake AC Power"
     lambda: |-
-      return ( id(basement_power) + id(entrance_lights_power) + id(east_lights_power) + id(west_lights_power) + id(north_lights_power) + id(south_lights_power)  + id(pool_maintenance_power) );
+      return ( id(basement_ap_power) + id(entrance_lights_power) + id(basement_lights_power) + id(pool_maintenance_power) + id(east_lights_power) + id(west_lights_power) + id(north_lights_power) + id(south_lights_power) );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
