@@ -792,7 +792,7 @@ sensor:
     name: "MVHR AC Power"
     lambda: |-
       return ( id(mvhr_power_multiplier) * id(ha_mvhr_power).state );
-    accuracy_decimals: 0
+    accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
     device_class: power
@@ -800,7 +800,7 @@ sensor:
     id: ac_power_mvhr
   
   - platform: total_daily_energy
-    name: "MVHR Energy Consumed"
+    name: "MVHR Fake Energy Consumed"
     power_id: ac_power_mvhr
     unit_of_measurement: kWh
     filters:
