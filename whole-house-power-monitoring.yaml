@@ -35,7 +35,7 @@
 #
 #####
 #
-# Last Modified : 2023-05-14
+# Last Modified : 2024-05-25
 #
 
 #### There are here to produce power measurements for loads with no CT clamps, but being of a fixed nature (light bulbs) and being controlled through WiFi relays, we can know when they are ON or OFF
@@ -67,6 +67,9 @@ globals:
   - id: mvhr_power_multiplier
     type: float
     initial_value: '1.0'
+  - id: toolshed_outdoors_lights_power
+    type: float
+    initial_value: '0.0'
 
 esphome:
   name: power-monitoring
@@ -182,7 +185,7 @@ text_sensor:
             id(west_lights_power) = 0.0;
           }
   - platform: homeassistant
-    entity_id: switch.sonoff_basic_02
+    entity_id: switch.attic_relay_north_3
     id: north_lights_status
     on_value:
       then:
@@ -194,13 +197,13 @@ text_sensor:
             id(north_lights_power) = 0.0;
           }
   - platform: homeassistant
-    entity_id: switch.sonoff_mini_r2_01_relay
+    entity_id: switch.attic_relay_south_3
     id: south_lights_status
     on_value:
       then:
         lambda: |-
           if (x == "on") {
-            id(south_lights_power) = 150.0;
+            id(south_lights_power) = 100.0;
           }
           else {
             id(south_lights_power) = 0.0;
@@ -242,7 +245,7 @@ text_sensor:
             id(basement_lights_power) = 0.0;
           }
   - platform: homeassistant
-    entity_id: switch.4ch_pro_r2_01_relay_4
+    entity_id: switch.sonoff_mini_r2_01_relay
     id: pool_maintenance_status
     on_value:
       then:
@@ -252,6 +255,18 @@ text_sensor:
           }
           else {
             id(pool_maintenance_power) = 0.0;
+          }
+  - platform: homeassistant
+    entity_id: switch.sonoff_basic_03
+    id: toolshed_outdoors_lights_status
+    on_value:
+      then:
+        lambda: |-
+          if (x == "on") {
+            id(toolshed_outdoors_lights_power) = 30.0;
+          }
+          else {
+            id(toolshed_outdoors_lights_power) = 0.0;
           }
 
 #### We pull a rather reliable AC voltage measurement from Home Assistant entity (which corresponds to a SONOFF DUAL R3) to calculate (active) power as product of measured current times voltage
@@ -787,6 +802,25 @@ sensor:
     filters:
       - multiply: 0.001
 
+#### Tool shed outdoors lights power and energy consumed
+  - platform: template
+    name: "Toolshed Outdoors Lights Power"
+    lambda: |-
+      return ( id(toolshed_outdoors_lights_power) );
+    accuracy_decimals: 1
+    update_interval: 30s
+    state_class: measurement
+    device_class: power
+    unit_of_measurement: "W"
+    id: ac_power_toolshed_outdoors_lights
+  
+  - platform: total_daily_energy
+    name: "Toolshed Outdoors Lights Energy Consumed"
+    power_id: ac_power_toolshed_outdoors_lights
+    unit_of_measurement: kWh
+    filters:
+      - multiply: 0.001
+
 #### MVHR (Mechanical Ventilation with Heat Recovery) power and energy consumed
   - platform: template
     name: "MVHR AC Power"
@@ -811,7 +845,7 @@ sensor:
   - platform: template
     name: "Outdoors Fake AC Power"
     lambda: |-
-      return ( id(basement_ap_power) + id(entrance_lights_power) + id(basement_lights_power) + id(pool_maintenance_power) + id(east_lights_power) + id(west_lights_power) + id(north_lights_power) + id(south_lights_power) );
+      return ( id(basement_ap_power) + id(entrance_lights_power) + id(basement_lights_power) + id(pool_maintenance_power) + id(east_lights_power) + id(west_lights_power) + id(north_lights_power) + id(south_lights_power) + id(toolshed_outdoors_lights_power) );
     accuracy_decimals: 1
     update_interval: 30s
     state_class: measurement
