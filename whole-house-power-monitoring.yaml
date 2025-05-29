@@ -35,7 +35,7 @@
 #
 #####
 #
-# Last Modified : 2024-05-25
+# Last Modified : 2025-05-30
 #
 
 #### There are here to produce power measurements for loads with no CT clamps, but being of a fixed nature (light bulbs) and being controlled through WiFi relays, we can know when they are ON or OFF
@@ -74,7 +74,8 @@ globals:
 esphome:
   name: power-monitoring
   comment: "Home Power Monitoring"
-  platform: ESP32
+
+esp32:
   board: nodemcu-32s
 
 wifi:
@@ -108,8 +109,11 @@ api:
     key: !secret esphome_api_key
 
 ota:
-  safe_mode: True
-  password: !secret esphome_ota_password
+  - platform: esphome
+    password: !secret esphome_ota_password
+
+safe_mode:
+  disabled: false
 
 #web_server:
 #  port: 8888
@@ -251,7 +255,7 @@ text_sensor:
       then:
         lambda: |-
           if (x == "on") {
-            id(pool_maintenance_power) = 105.0;
+            id(pool_maintenance_power) = 0.0;
           }
           else {
             id(pool_maintenance_power) = 0.0;
