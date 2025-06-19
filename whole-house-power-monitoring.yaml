@@ -255,7 +255,7 @@ text_sensor:
       then:
         lambda: |-
           if (x == "on") {
-            id(pool_maintenance_power) = 0.0;
+            id(pool_maintenance_power) = 105.0;
           }
           else {
             id(pool_maintenance_power) = 0.0;
