@@ -35,7 +35,7 @@
 #
 #####
 #
-# Last Modified : 2025-05-30
+# Last Modified : 2025-11-11
 #
 
 #### There are here to produce power measurements for loads with no CT clamps, but being of a fixed nature (light bulbs) and being controlled through WiFi relays, we can know when they are ON or OFF
@@ -291,7 +291,7 @@ sensor:
 
   - platform: homeassistant
     name: "MVHR Power Consumption"
-    entity_id: sensor.mvhr_power_consumption
+    entity_id: sensor.zehnder_comfoair_q_6c5d00_power
     unit_of_measurement: "W"
     device_class: power
     accuracy_decimals: 1
